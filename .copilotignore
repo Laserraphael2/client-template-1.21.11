@@ -1,0 +1,7 @@
+# Verhindert, dass der Agent riesige kompilierte Dateien oder Logs liest
+.gradle/
+build/
+run/
+*.log
+*.jar
+src/main/resources/assets/*/textures/
