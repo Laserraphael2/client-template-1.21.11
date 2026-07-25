@@ -20,6 +20,9 @@ import mod.client.client.screen.panels.PositionsPanel;
 import mod.client.client.screen.panels.SettingsPanel;
 import mod.client.client.screen.panels.SpotifyPanel;
 import mod.client.client.util.KeyNameUtils;
+import mod.client.shield.ShieldPatternData;
+import mod.client.shield.ShieldPatternPayload;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -28,6 +31,8 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
 import javax.imageio.ImageIO;
@@ -61,6 +66,9 @@ public class XenonMenuScreen extends Screen {
     private static final int CROSSHAIR_EDITOR_X = 480;
     private static final int CROSSHAIR_EDITOR_Y = 166;
     private static final int CROSSHAIR_EDITOR_CELL = 12;
+    private static final int SHIELD_EDITOR_X = 84;
+    private static final int SHIELD_EDITOR_Y = 92;
+    private static final int SHIELD_EDITOR_CELL = 18;
     private static final String[] FILTERS = {"All", "New", "HUD", "Hypixel", "PvP"};
 
     private int winX;
@@ -83,6 +91,8 @@ public class XenonMenuScreen extends Screen {
     private int draggingSlider; // 0=none, 1=red, 2=green, 3=blue
     private boolean drawingCrosshair;
     private boolean crosshairDrawValue;
+    private boolean drawingShield;
+    private boolean shieldDrawValue;
     private boolean searchFocused;
     private boolean confirmReset;
     private boolean wizardVisible;
@@ -107,6 +117,10 @@ public class XenonMenuScreen extends Screen {
     private int crosshairGreen;
     private int crosshairBlue;
     private boolean customCrosshairEnabled;
+    private String shieldPattern = ShieldPatternData.EMPTY_PATTERN;
+    private int shieldRed = (ShieldPatternData.DEFAULT_COLOR >> 16) & 0xFF;
+    private int shieldGreen = (ShieldPatternData.DEFAULT_COLOR >> 8) & 0xFF;
+    private int shieldBlue = ShieldPatternData.DEFAULT_COLOR & 0xFF;
     private String presetName = "default";
     private String spotifyClientIdInput = "";
     private String spotifyRefreshInput = "1000";
@@ -137,7 +151,7 @@ public class XenonMenuScreen extends Screen {
         MODULES,
         SETTINGS,
         POSITIONS,
-        CHAT,
+        SHIELD,
         SPOTIFY,
         PERFORMANCE,
         CONFIG,
@@ -232,7 +246,7 @@ public class XenonMenuScreen extends Screen {
             case MODULES -> modulesPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case SETTINGS -> settingsPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case POSITIONS -> positionsPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
-            case CHAT -> renderComingSoon(ctx, drawX, drawY, "Chat Options coming soon...");
+            case SHIELD -> renderShieldEditor(ctx, mouseX, mouseY, drawX, drawY, theme);
             case SPOTIFY -> spotifyPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case PERFORMANCE -> performancePanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case CONFIG -> configPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
@@ -387,7 +401,7 @@ public class XenonMenuScreen extends Screen {
         renderSidebarTab(ctx, mouseX, mouseY, Tab.MODULES, 68, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.SETTINGS, 122, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.POSITIONS, 176, drawX, drawY, theme.accent);
-        renderSidebarTab(ctx, mouseX, mouseY, Tab.CHAT, 230, drawX, drawY, theme.accent);
+        renderSidebarTab(ctx, mouseX, mouseY, Tab.SHIELD, 230, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.SPOTIFY, 284, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.PERFORMANCE, 338, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.CONFIG, 392, drawX, drawY, theme.accent);
@@ -1433,6 +1447,78 @@ public class XenonMenuScreen extends Screen {
         ctx.drawString(this.font, text, x, y, RenderUtils.MUTED_COLOR, false);
     }
 
+    private void renderShieldEditor(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
+        int gridX = drawX + SHIELD_EDITOR_X;
+        int gridY = drawY + SHIELD_EDITOR_Y;
+        int gridSize = ShieldPatternData.GRID_SIZE * SHIELD_EDITOR_CELL;
+        int color = 0xFF000000 | shieldColor();
+
+        ctx.drawString(this.font, "Shield Painter", drawX + 76, drawY + 62, RenderUtils.TEXT_COLOR, true);
+        ctx.drawString(this.font, "Left click draws, right click erases", drawX + 76, drawY + 76, RenderUtils.MUTED_COLOR, false);
+        RenderUtils.drawGlassPanel(ctx, gridX - 8, gridY - 8, gridSize + 16, gridSize + 16, 8, 0xEAF7FCFF, theme.accent);
+        for (int row = 0; row < ShieldPatternData.GRID_SIZE; row++) {
+            for (int column = 0; column < ShieldPatternData.GRID_SIZE; column++) {
+                int x = gridX + column * SHIELD_EDITOR_CELL;
+                int y = gridY + row * SHIELD_EDITOR_CELL;
+                boolean active = shieldPattern.charAt(row * ShieldPatternData.GRID_SIZE + column) == '1';
+                ctx.fill(x, y, x + SHIELD_EDITOR_CELL - 1, y + SHIELD_EDITOR_CELL - 1,
+                        active ? color : 0xBFE7F1F7);
+            }
+        }
+
+        int controlsX = drawX + 414;
+        int controlsY = drawY + 92;
+        RenderUtils.drawGlassPanel(ctx, controlsX - 12, controlsY - 12, 318, 318, 8, 0xEAF7FCFF, theme.accent);
+        ctx.drawString(this.font, "Paint color", controlsX, controlsY, RenderUtils.TEXT_COLOR, true);
+        renderShieldColorSlider(ctx, "R", controlsX, controlsY + 28, shieldRed, 4, 0xFFE05A5A);
+        renderShieldColorSlider(ctx, "G", controlsX, controlsY + 62, shieldGreen, 5, 0xFF55C878);
+        renderShieldColorSlider(ctx, "B", controlsX, controlsY + 96, shieldBlue, 6, 0xFF4A8FE7);
+
+        ctx.drawString(this.font, "Preview", controlsX, controlsY + 136, RenderUtils.TEXT_COLOR, true);
+        int previewX = controlsX + 12;
+        int previewY = controlsY + 154;
+        RenderUtils.drawRoundedRect(ctx, previewX, previewY, 92, 126, 10, 0xFF6B4B32);
+        for (int row = 0; row < ShieldPatternData.GRID_SIZE; row++) {
+            for (int column = 0; column < ShieldPatternData.GRID_SIZE; column++) {
+                if (shieldPattern.charAt(row * ShieldPatternData.GRID_SIZE + column) == '1') {
+                    int x = previewX + 6 + column * 5;
+                    int y = previewY + 7 + row * 7;
+                    ctx.fill(x, y, x + 5, y + 7, color);
+                }
+            }
+        }
+
+        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 154, 164, 28, "Load held shield", theme.accent);
+        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 192, 164, 28, "Clear canvas", 0xFFD87474);
+        ctx.drawString(this.font, "Requires the mod on the server", controlsX + 124, controlsY + 232, RenderUtils.MUTED_COLOR, false);
+        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 252, 164, 34, "Apply to held shield", 0xFF35B86B);
+    }
+
+    private void renderShieldColorSlider(GuiGraphics ctx, String label, int x, int y, int value, int slider, int color) {
+        ctx.drawString(this.font, label + ": " + value, x, y, RenderUtils.TEXT_COLOR, false);
+        int sliderX = x + 38;
+        int sliderW = 220;
+        RenderUtils.drawRoundedRect(ctx, sliderX, y + 3, sliderW, 10, 5, 0xA8080B10);
+        int fillW = (int) ((value / 255.0F) * sliderW);
+        RenderUtils.drawRoundedRect(ctx, sliderX, y + 3, fillW, 10, 5, color);
+        RenderUtils.drawRoundedRect(ctx, Math.max(sliderX, sliderX + fillW - 2), y, 5, 16, 2, 0xFFFFFFFF);
+        if (draggingSlider == slider) {
+            ctx.drawString(this.font, "*", sliderX + sliderW + 8, y, color, false);
+        }
+    }
+
+    private void drawShieldEditorButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h,
+                                        String text, int accent) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        RenderUtils.drawGlassPanel(ctx, x, y, w, h, 6, hover ? 0xF7FFFFFF : 0xECF8FEFF, accent);
+        ctx.drawString(this.font, text, x + (w - this.font.width(text)) / 2, y + (h - 8) / 2,
+                RenderUtils.TEXT_COLOR, false);
+    }
+
+    private int shieldColor() {
+        return (shieldRed << 16) | (shieldGreen << 8) | shieldBlue;
+    }
+
     private void renderColorSlider(GuiGraphics ctx, String label, int x, int y, int value, int slider, int accentColor) {
         ctx.drawString(this.font, label + ": " + value, x, y, RenderUtils.TEXT_COLOR, false);
         int sliderX = x + 38;
@@ -1523,6 +1609,10 @@ public class XenonMenuScreen extends Screen {
             if (currentTab == Tab.SETTINGS && event.button() == 1) {
                 return settingsPanel.mouseClicked(mx, my, event.button());
             }
+            if (currentTab == Tab.SHIELD && event.button() == 1) {
+                handleShieldEditorClick(mx, my, false);
+                return true;
+            }
             return super.mouseClicked(event, doubleClick);
         }
 
@@ -1540,7 +1630,7 @@ public class XenonMenuScreen extends Screen {
             if (inside(mx, my, boxX, 68, boxW, boxH)) { currentTab = Tab.MODULES; return true; }
             if (inside(mx, my, boxX, 122, boxW, boxH)) { currentTab = Tab.SETTINGS; return true; }
             if (inside(mx, my, boxX, 176, boxW, boxH)) { currentTab = Tab.POSITIONS; return true; }
-            if (inside(mx, my, boxX, 230, boxW, boxH)) { currentTab = Tab.CHAT; return true; }
+            if (inside(mx, my, boxX, 230, boxW, boxH)) { currentTab = Tab.SHIELD; return true; }
             if (inside(mx, my, boxX, 284, boxW, boxH)) { currentTab = Tab.SPOTIFY; return true; }
             if (inside(mx, my, boxX, 338, boxW, boxH)) { currentTab = Tab.PERFORMANCE; return true; }
             if (inside(mx, my, boxX, 392, boxW, boxH)) { currentTab = Tab.CONFIG; return true; }
@@ -1586,6 +1676,11 @@ public class XenonMenuScreen extends Screen {
             return settingsPanel.mouseClicked(mx, my, event.button());
         }
 
+        if (currentTab == Tab.SHIELD) {
+            handleShieldEditorClick(mx, my, true);
+            return true;
+        }
+
         if (currentTab == Tab.CONFIG) {
             return configPanel.mouseClicked(mx, my, event.button());
         }
@@ -1599,6 +1694,112 @@ public class XenonMenuScreen extends Screen {
         }
 
         return true;
+    }
+
+    private void handleShieldEditorClick(int mx, int my, boolean drawValue) {
+        if (applyShieldCanvasInput(mx, my, drawValue)) {
+            drawingShield = true;
+            shieldDrawValue = drawValue;
+            return;
+        }
+
+        int controlsX = 414;
+        int controlsY = 92;
+        int sliderX = controlsX + 38;
+        if (inside(mx, my, sliderX, controlsY + 28, 220, 16)) {
+            draggingSlider = 4;
+            applyShieldSlider(mx, sliderX, 4);
+            return;
+        }
+        if (inside(mx, my, sliderX, controlsY + 62, 220, 16)) {
+            draggingSlider = 5;
+            applyShieldSlider(mx, sliderX, 5);
+            return;
+        }
+        if (inside(mx, my, sliderX, controlsY + 96, 220, 16)) {
+            draggingSlider = 6;
+            applyShieldSlider(mx, sliderX, 6);
+            return;
+        }
+        if (!drawValue) {
+            return;
+        }
+        if (inside(mx, my, controlsX + 124, controlsY + 154, 164, 28)) {
+            loadHeldShieldPattern();
+        } else if (inside(mx, my, controlsX + 124, controlsY + 192, 164, 28)) {
+            shieldPattern = ShieldPatternData.EMPTY_PATTERN;
+        } else if (inside(mx, my, controlsX + 124, controlsY + 252, 164, 34)) {
+            applyPatternToHeldShield();
+        }
+    }
+
+    private boolean applyShieldCanvasInput(int mx, int my, boolean active) {
+        int size = ShieldPatternData.GRID_SIZE * SHIELD_EDITOR_CELL;
+        if (!inside(mx, my, SHIELD_EDITOR_X, SHIELD_EDITOR_Y, size, size)) {
+            return false;
+        }
+        int column = (mx - SHIELD_EDITOR_X) / SHIELD_EDITOR_CELL;
+        int row = (my - SHIELD_EDITOR_Y) / SHIELD_EDITOR_CELL;
+        int index = row * ShieldPatternData.GRID_SIZE + column;
+        char[] pixels = shieldPattern.toCharArray();
+        pixels[index] = active ? '1' : '0';
+        shieldPattern = new String(pixels);
+        return true;
+    }
+
+    private void applyShieldSlider(int mouseX, int sliderX, int slider) {
+        int value = clamp((int) (((mouseX - sliderX) / 220.0F) * 255.0F), 0, 255);
+        switch (slider) {
+            case 4 -> shieldRed = value;
+            case 5 -> shieldGreen = value;
+            case 6 -> shieldBlue = value;
+            default -> {
+            }
+        }
+    }
+
+    private ItemStack heldShield() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            return ItemStack.EMPTY;
+        }
+        if (client.player.getMainHandItem().is(Items.SHIELD)) {
+            return client.player.getMainHandItem();
+        }
+        if (client.player.getOffhandItem().is(Items.SHIELD)) {
+            return client.player.getOffhandItem();
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private void loadHeldShieldPattern() {
+        ItemStack shield = heldShield();
+        if (shield.isEmpty()) {
+            toast("Hold a shield in either hand");
+            return;
+        }
+        ShieldPatternData.Pattern pattern = ShieldPatternData.read(shield);
+        shieldPattern = pattern.pixels();
+        shieldRed = (pattern.color() >> 16) & 0xFF;
+        shieldGreen = (pattern.color() >> 8) & 0xFF;
+        shieldBlue = pattern.color() & 0xFF;
+        toast("Shield design loaded");
+    }
+
+    private void applyPatternToHeldShield() {
+        Minecraft client = Minecraft.getInstance();
+        ItemStack shield = heldShield();
+        if (client.player == null || shield.isEmpty()) {
+            toast("Hold a shield in either hand");
+            return;
+        }
+        if (!ClientPlayNetworking.canSend(ShieldPatternPayload.TYPE)) {
+            toast("Server needs Xenon Client 1.1.0+");
+            return;
+        }
+        boolean offhand = !client.player.getMainHandItem().is(Items.SHIELD);
+        ClientPlayNetworking.send(new ShieldPatternPayload(shieldPattern, shieldColor(), offhand));
+        toast("Shield design applied");
     }
 
     private void handleSettingsClick(int mx, int my, int button) {
@@ -1785,6 +1986,10 @@ public class XenonMenuScreen extends Screen {
 
         if (draggingSlider > 0) {
             int absX = toLogical(screenX);
+            if (currentTab == Tab.SHIELD && draggingSlider >= 4) {
+                applyShieldSlider(absX - winX, 452, draggingSlider);
+                return true;
+            }
             int sliderX = winX + 114;
             int sliderW = 220;
             float pct = Math.max(0.0f, Math.min(1.0f, (((float) absX) - sliderX) / sliderW));
@@ -1804,6 +2009,13 @@ public class XenonMenuScreen extends Screen {
             int mx = toLogical(screenX) - winX;
             int my = toLogical(screenY) - winY;
             applyCrosshairCanvasInput(mx, my, crosshairDrawValue);
+            return true;
+        }
+
+        if (drawingShield) {
+            int mx = toLogical(screenX) - winX;
+            int my = toLogical(screenY) - winY;
+            applyShieldCanvasInput(mx, my, shieldDrawValue);
             return true;
         }
 
@@ -1936,6 +2148,11 @@ public class XenonMenuScreen extends Screen {
         if (drawingCrosshair) {
             drawingCrosshair = false;
             ClientClient.getHudManager().saveConfig();
+            handled = true;
+        }
+
+        if (drawingShield) {
+            drawingShield = false;
             handled = true;
         }
 
@@ -2320,9 +2537,9 @@ public class XenonMenuScreen extends Screen {
                 ctx.fill(x + 3, y + 7, x + 13, y + 9, fx);
                 ctx.fill(x + 6, y + 6, x + 10, y + 10, 0x66FFFFFF);
             }
-            case CHAT -> {
-                RenderUtils.drawRoundedRect(ctx, x + 3, y + 4, 10, 7, 3, fx);
-                ctx.fill(x + 6, y + 11, x + 8, y + 13, fx);
+            case SHIELD -> {
+                RenderUtils.drawRoundedRect(ctx, x + 4, y + 3, 8, 10, 3, fx);
+                ctx.fill(x + 6, y + 12, x + 10, y + 14, fx);
             }
             case SPOTIFY -> {
                 RenderUtils.drawRoundedRect(ctx, x + 3, y + 4, 10, 10, 5, fx);

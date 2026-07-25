@@ -8,7 +8,8 @@
 		"KeyboardMixin",
 		"ClientTickMixin",
 		"InGameHudMixin",
-		"GuiGraphicsMixin"
+		"GuiGraphicsMixin",
+		"ShieldSpecialRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
