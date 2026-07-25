@@ -904,18 +904,26 @@ public class XenonMenuScreen extends Screen {
     private void renderSpotifySetup(GuiGraphics ctx, int mouseX, int mouseY, int appX, int appY, int appW, int appH,
                                     SpotifySnapshot snapshot, int spotifyGreen) {
         int panelW = 360;
-        int panelH = 144;
+        int panelH = 184;
         int panelX = appX + (appW - panelW) / 2;
         int panelY = appY + (appH - panelH) / 2;
         RenderUtils.drawGlassPanel(ctx, panelX, panelY, panelW, panelH, 8, 0xD8FFFFFF, spotifyGreen);
 
         ctx.drawString(this.font, "Connect Spotify", panelX + 18, panelY + 18, RenderUtils.TEXT_COLOR, true);
-        ctx.drawString(this.font, "Log in once in your browser. No setup needed.", panelX + 18, panelY + 38, RenderUtils.MUTED_COLOR, false);
+        ctx.drawString(this.font, "Enter your own Client ID if the default app rejects you.", panelX + 18, panelY + 38, RenderUtils.MUTED_COLOR, false);
+
+        int inputY = panelY + 58;
+        RenderUtils.drawGlassPanel(ctx, panelX + 18, inputY, panelW - 36, 24, 6,
+            spotifyClientIdFocused ? 0xF6FCFFFF : 0xECF8FEFF, spotifyGreen);
+        String clientIdText = spotifyClientIdInput.isBlank() ? "Spotify Client ID (optional)" : spotifyClientIdInput;
+        int clientIdColor = spotifyClientIdInput.isBlank() ? RenderUtils.MUTED_COLOR : RenderUtils.TEXT_COLOR;
+        ctx.drawString(this.font, cropText(clientIdText, 48), panelX + 26, inputY + 8, clientIdColor, false);
 
         boolean connecting = snapshot.connecting();
-        drawSpotifyPrimaryButton(ctx, mouseX, mouseY, panelX + 18, panelY + 66, panelW - 36, 32,
+        drawSpotifyPrimaryButton(ctx, mouseX, mouseY, panelX + 18, panelY + 94, panelW - 36, 32,
             connecting ? "Finish login in browser" : "Connect with Spotify", spotifyGreen);
-        ctx.drawString(this.font, cropText(snapshot.status(), 48), panelX + 18, panelY + 112, RenderUtils.MUTED_COLOR, false);
+        ctx.drawString(this.font, cropText(snapshot.status(), 48), panelX + 18, panelY + 140, RenderUtils.MUTED_COLOR, false);
+        ctx.drawString(this.font, "Redirect: http://127.0.0.1:8888/callback", panelX + 18, panelY + 158, RenderUtils.MUTED_COLOR, false);
     }
 
     private void drawSpotifyPrimaryButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h, String text, int color) {
@@ -1088,15 +1096,27 @@ public class XenonMenuScreen extends Screen {
 
         if (!snapshot.authenticated()) {
             int panelW = 360;
-            int panelH = 144;
+            int panelH = 184;
             int panelX = x + (appW - panelW) / 2;
             int panelY = y + (appH - panelH) / 2;
 
-            if (inside(mx, my, panelX + 18, panelY + 66, panelW - 36, 32)) {
+            if (inside(mx, my, panelX + 18, panelY + 58, panelW - 36, 24)) {
+                spotifyClientIdFocused = true;
+                return;
+            }
+
+            if (inside(mx, my, panelX + 18, panelY + 94, panelW - 36, 32)) {
+                ClientClient.getInstance().setSpotifyClientId(spotifyClientIdInput);
+                service.setClientId(spotifyClientIdInput);
+                spotifyClientIdInput = service.getClientId();
+                ClientClient.getInstance().setSpotifyClientId(spotifyClientIdInput);
+                ClientClient.getHudManager().saveConfig();
+                spotifyClientIdFocused = false;
                 service.beginLogin();
                 return;
             }
 
+            spotifyClientIdFocused = false;
             return;
         }
 

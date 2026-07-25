@@ -99,9 +99,10 @@ public class SpotifyService {
         this.refreshIntervalMs = clampRefreshInterval(state.getSpotifyRefreshIntervalMs());
 
         SpotifyAuthStore.AuthData auth = authStore.load();
-        boolean compatibleSession = BUNDLED_CLIENT_ID.equals(normalizeClientId(auth.clientId));
-        this.clientId = BUNDLED_CLIENT_ID;
-        state.setSpotifyClientId(BUNDLED_CLIENT_ID);
+        String configuredClientId = normalizeClientId(state.getSpotifyClientId());
+        this.clientId = isLikelyClientId(configuredClientId) ? configuredClientId : BUNDLED_CLIENT_ID;
+        boolean compatibleSession = this.clientId.equals(normalizeClientId(auth.clientId));
+        state.setSpotifyClientId(this.clientId);
         if (compatibleSession) {
             this.accessToken = safe(auth.accessToken);
             this.refreshToken = safe(auth.refreshToken);
@@ -131,9 +132,23 @@ public class SpotifyService {
 
     public void setClientId(String clientId) {
         synchronized (lock) {
-            this.clientId = BUNDLED_CLIENT_ID;
+            String nextClientId = normalizeClientId(clientId);
+            if (nextClientId.isBlank()) {
+                nextClientId = BUNDLED_CLIENT_ID;
+            }
+            if (nextClientId.equals(this.clientId)) {
+                return;
+            }
+            this.clientId = nextClientId;
+            accessToken = "";
+            refreshToken = "";
+            expiresAtMs = 0L;
+            pendingState = "";
+            pendingVerifier = "";
+            stopCallbackServer();
             persistAuth();
         }
+        setStatus("Spotify disconnected", false, false);
     }
 
     public String getClientId() {
@@ -167,8 +182,7 @@ public class SpotifyService {
     public void beginLogin() {
         String localClientId;
         synchronized (lock) {
-            clientId = BUNDLED_CLIENT_ID;
-            localClientId = BUNDLED_CLIENT_ID;
+            localClientId = clientId;
         }
 
         if (localClientId.isBlank()) {

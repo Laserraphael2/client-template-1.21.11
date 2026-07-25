@@ -4,7 +4,7 @@
 
 ### 📦 JAR-Datei Location
 ```
-build\libs\client-1.0.0.jar
+build\libs\client-1.0.1.jar
 ```
 
 ---
@@ -24,9 +24,20 @@ build\libs\client-1.0.0.jar
    - Linux: `~/.minecraft/mods`
 
 ### Schritt 3: Xenon Client installieren
-1. Kopiere `build\libs\client-1.0.0.jar` in den `mods` Ordner
+1. Kopiere `build\libs\client-1.0.1.jar` in den `mods` Ordner
 2. Starte Minecraft mit dem **Fabric** Profil
 3. Drücke **RSHIFT** (Rechts Shift) im Spiel, um das Menü zu öffnen
+
+---
+
+## Spotify verbinden
+
+Spotify Developer-Apps erlauben nicht automatisch beliebige Konten. Nutze einen dieser Wege:
+
+1. Füge das Spotify-Konto unter **Spotify Developer Dashboard > Settings > User Management** zu deiner App hinzu.
+2. Oder erstelle eine eigene Spotify-App, registriere `http://127.0.0.1:8888/callback` als Redirect URI und trage deren Client-ID im Spotify-Tab der Mod ein.
+
+Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** anklicken. Für die Wiedergabesteuerung kann Spotify Premium erforderlich sein.
 
 ---
 
@@ -97,7 +108,7 @@ build\libs\client-1.0.0.jar
 ---
 
 ## 📝 Version Info
-- **Mod Version:** 1.0.0
+- **Mod Version:** 1.0.1
 - **Minecraft:** 1.21.11
 - **Fabric Loader:** 0.19.3
 - **Fabric API:** 0.141.5+1.21.11
