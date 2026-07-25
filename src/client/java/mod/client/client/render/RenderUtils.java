@@ -6,20 +6,43 @@ import net.minecraft.client.gui.GuiGraphics;
 public class RenderUtils {
     public static final int TEXT_COLOR = 0xFFFFFFFF;
     public static final int SEPARATOR_COLOR = 0xFF2A2A2A;
-    public static final int MUTED_COLOR = 0xFF555555;
+    public static final int MUTED_COLOR = 0xFF9AA4B2;
     public static final int SUCCESS_COLOR = 0xFF43B581;
     public static final int DANGER_COLOR = 0xFFE53935;
     public static final int HOVER_COLOR = 0xFF222222;
 
-    private static final int GLASS_LIGHT_BORDER = 0x26FFFFFF;
-    private static final int GLASS_DARK_BORDER = 0x22000000;
+    private static final int GLASS_LIGHT_BORDER = 0x18FFFFFF;
+    private static final int GLASS_DARK_BORDER = 0x18000000;
+    private static final int MAX_CACHED_RADIUS = 32;
+    private static final double[][] ROUNDED_INSETS = createRoundedInsetCache();
 
     public static void drawRoundedRect(GuiGraphics context, int x, int y, int width, int height, int radius, int color) {
         if (width <= 0 || height <= 0) {
             return;
         }
 
-        context.fill(x, y, x + width, y + height, color);
+        int corner = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+        if (corner == 0) {
+            context.fill(x, y, x + width, y + height, color);
+            return;
+        }
+
+        context.fill(x, y + corner, x + width, y + height - corner, color);
+        for (int row = 0; row < corner; row++) {
+            double exactInset = roundedInsetExact(row, corner);
+            int inset = (int) Math.ceil(exactInset);
+            context.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
+            context.fill(x + inset, y + height - row - 1, x + width - inset, y + height - row, color);
+
+            float edgeCoverage = (float) (inset - exactInset);
+            if (edgeCoverage > 0.01f && inset > 0) {
+                int edgeColor = scaleAlpha(color, edgeCoverage);
+                context.fill(x + inset - 1, y + row, x + inset, y + row + 1, edgeColor);
+                context.fill(x + width - inset, y + row, x + width - inset + 1, y + row + 1, edgeColor);
+                context.fill(x + inset - 1, y + height - row - 1, x + inset, y + height - row, edgeColor);
+                context.fill(x + width - inset, y + height - row - 1, x + width - inset + 1, y + height - row, edgeColor);
+            }
+        }
     }
 
     public static void drawRoundedRectWithBorder(GuiGraphics context, int x, int y, int width, int height, int radius, int bgColor, int borderColor) {
@@ -28,39 +51,43 @@ public class RenderUtils {
     }
 
     public static void drawGlassPanel(GuiGraphics context, int x, int y, int width, int height, int radius, int baseColor, int accentColor) {
-        drawVerticalGradient(context, x, y, width, height, blend(baseColor, 0x12FFFFFF), blend(baseColor, 0x22000000), 4);
-        drawHorizontalGradient(context, x, y, width, height, blend(baseColor, 0x10FFFFFF), blend(baseColor, 0x08000000), 4);
-        drawRoundedRect(context, x, y, width, height, radius, baseColor);
+        if (width >= 80 && height >= 40) {
+            drawRoundedRect(context, x + 1, y + 2, width, height, radius, 0x10000000);
+        }
+        int glassAlpha = Math.max(0x48, Math.round(((baseColor >>> 24) & 0xFF) * 0.52f));
+        drawRoundedRect(context, x, y, width, height, radius, (glassAlpha << 24) | 0x00090B0F);
         drawGlassBorder(context, x, y, width, height, radius, accentColor);
     }
 
     public static void drawGlassBorder(GuiGraphics context, int x, int y, int width, int height, int radius, int accentColor) {
-        drawRoundedRectOutline(context, x, y, width, height, radius, GLASS_LIGHT_BORDER);
-        context.fill(x, y, x + width, y + 1, GLASS_LIGHT_BORDER);
-        context.fill(x, y, x + 1, y + height, GLASS_LIGHT_BORDER);
-        context.fill(x, y + height - 1, x + width, y + height, GLASS_DARK_BORDER);
-        context.fill(x + width - 1, y, x + width, y + height, GLASS_DARK_BORDER);
-
-        int innerAccent = blend(accentColor, 0x2AFFFFFF);
-        context.fill(x + 1, y + 1, x + width - 1, y + 2, innerAccent);
+        int accentLine = (0x32 << 24) | (accentColor & 0x00FFFFFF);
+        int lineInset = Math.max(2, Math.min(radius, width / 4));
+        if (width >= 80 && height >= 32) {
+            drawRoundedRectOutline(context, x, y, width, height, radius, GLASS_LIGHT_BORDER);
+        }
+        context.fill(x + lineInset, y, x + width - lineInset, y + 1, accentLine);
+        if (height >= 32) {
+            context.fill(x + lineInset, y + height - 1, x + width - lineInset, y + height, GLASS_DARK_BORDER);
+        }
     }
 
     public static void drawGlassHoverOverlay(GuiGraphics context, int x, int y, int width, int height, boolean hover, int baseAccentColor) {
-        int alpha = hover ? 0x26 : 0x12;
+        int alpha = hover ? 0x12 : 0x08;
         int overlay = (alpha << 24) | (baseAccentColor & 0x00FFFFFF);
         context.fill(x, y, x + width, y + height, overlay);
     }
 
+    public static void drawClickPulse(GuiGraphics context, int centerX, int centerY, float progress, int accentColor) {
+        float eased = 1.0f - (1.0f - progress) * (1.0f - progress);
+        int radius = 4 + Math.round(18.0f * eased);
+        int alpha = Math.round(54.0f * (1.0f - progress));
+        int color = (alpha << 24) | (accentColor & 0x00FFFFFF);
+        drawRoundedRect(context, centerX - radius, centerY - radius, radius * 2, radius * 2, radius, color);
+    }
+
     public static void drawModuleCard(GuiGraphics context, int x, int y, int width, int height, boolean hover, boolean enabled, int accentColor) {
-        int cardBg = hover ? 0xC8192232 : 0xBE141D2A;
-        drawRoundedRect(context, x, y, width, height, 8, cardBg);
-        
-        int lightEdge = 0x33FFFFFF;
-        int darkEdge = 0x22000000;
-        context.fill(x, y, x + width, y + 1, lightEdge);
-        context.fill(x, y, x + 1, y + height, lightEdge);
-        context.fill(x, y + height - 1, x + width, y + height, darkEdge);
-        context.fill(x + width - 1, y, x + width, y + height, darkEdge);
+        int cardBg = hover ? 0xD8FFFFFF : 0xB8FFFFFF;
+        drawGlassPanel(context, x, y, width, height, 8, cardBg, accentColor);
         
         if (enabled) {
             drawGreenGlow(context, x, y, width, height);
@@ -68,20 +95,20 @@ public class RenderUtils {
     }
 
     public static void drawGreenGlow(GuiGraphics context, int x, int y, int width, int height) {
-        int glowColor = 0x4043B581;
+        int glowColor = 0x3000D9FF;
         context.fill(x - 1, y - 1, x + width + 1, y, glowColor);
         context.fill(x - 1, y + height, x + width + 1, y + height + 1, glowColor);
         context.fill(x - 1, y, x, y + height, glowColor);
         context.fill(x + width, y, x + width + 1, y + height, glowColor);
         
-        int innerGlow = 0x2643B581;
+        int innerGlow = 0x2000D9FF;
         context.fill(x, y, x + width, y + 1, innerGlow);
         context.fill(x, y, x + 1, y + height, innerGlow);
     }
 
     public static void drawSmallButton(GuiGraphics context, int x, int y, int width, int height, int bgColor) {
-        drawRoundedRect(context, x, y, width, height, 4, bgColor);
-        int lightEdge = 0x26FFFFFF;
+        drawRoundedRect(context, x, y, width, height, 4, 0x7610141B);
+        int lightEdge = 0x16FFFFFF;
         context.fill(x, y, x + width, y + 1, lightEdge);
         context.fill(x, y, x + 1, y + height, lightEdge);
     }
@@ -123,10 +150,33 @@ public class RenderUtils {
             return;
         }
 
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
+        int corner = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+        if (corner == 0) {
+            context.fill(x, y, x + width, y + 1, color);
+            context.fill(x, y + height - 1, x + width, y + height, color);
+            context.fill(x, y + 1, x + 1, y + height - 1, color);
+            context.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
+            return;
+        }
+
+        context.fill(x, y + corner, x + 1, y + height - corner, color);
+        context.fill(x + width - 1, y + corner, x + width, y + height - corner, color);
+
+        int previousInset = corner;
+        for (int row = 0; row < corner; row++) {
+            int inset = roundedInset(row, height, corner);
+            if (row == 0) {
+                context.fill(x + inset, y + row, x + width - inset, y + row + 1, color);
+                context.fill(x + inset, y + height - row - 1, x + width - inset, y + height - row, color);
+            } else {
+                int thickness = Math.max(1, Math.abs(previousInset - inset));
+                context.fill(x + inset, y + row, x + inset + thickness, y + row + 1, color);
+                context.fill(x + width - inset - thickness, y + row, x + width - inset, y + row + 1, color);
+                context.fill(x + inset, y + height - row - 1, x + inset + thickness, y + height - row, color);
+                context.fill(x + width - inset - thickness, y + height - row - 1, x + width - inset, y + height - row, color);
+            }
+            previousInset = inset;
+        }
     }
 
     public static void drawProgressBar(GuiGraphics context, int x, int y, int width, int height, float progress, int bgColor, int fillColor) {
@@ -181,6 +231,42 @@ public class RenderUtils {
 
     private static int lerp(int start, int end, float t) {
         return Math.round(start + ((end - start) * t));
+    }
+
+    private static int roundedInset(int row, int height, int radius) {
+        int distance = Math.min(row, height - 1 - row);
+        return (int) Math.ceil(roundedInsetExact(distance, radius));
+    }
+
+    private static double roundedInsetExact(int row, int radius) {
+        if (row >= radius) {
+            return 0.0;
+        }
+
+        if (radius <= MAX_CACHED_RADIUS) {
+            return ROUNDED_INSETS[radius][row];
+        }
+
+        double vertical = radius - row - 0.5;
+        return Math.max(0.0, radius - Math.sqrt((radius * radius) - (vertical * vertical)));
+    }
+
+    private static double[][] createRoundedInsetCache() {
+        double[][] cache = new double[MAX_CACHED_RADIUS + 1][];
+        cache[0] = new double[0];
+        for (int radius = 1; radius <= MAX_CACHED_RADIUS; radius++) {
+            cache[radius] = new double[radius];
+            for (int row = 0; row < radius; row++) {
+                double vertical = radius - row - 0.5;
+                cache[radius][row] = Math.max(0.0, radius - Math.sqrt((radius * radius) - (vertical * vertical)));
+            }
+        }
+        return cache;
+    }
+
+    private static int scaleAlpha(int color, float factor) {
+        int alpha = Math.round(((color >>> 24) & 0xFF) * factor);
+        return (clamp(alpha, 0, 255) << 24) | (color & 0x00FFFFFF);
     }
 
     private static int clamp(int value, int min, int max) {

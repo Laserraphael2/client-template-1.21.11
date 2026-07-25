@@ -5,11 +5,14 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import mod.client.client.hud.HudManager;
 import mod.client.client.render.CrosshairCustomizer;
+import mod.client.client.render.MaceEnchantmentVisuals;
+import mod.client.client.spotify.SpotifyService;
 import mod.client.client.state.UIState;
 
 public class ClientClient implements ClientModInitializer {
     private static ClientClient instance;
     private static HudManager hudManager;
+    private static final SpotifyService spotifyService = SpotifyService.getInstance();
     private final UIState uiState = new UIState();
     
     @Override
@@ -17,6 +20,8 @@ public class ClientClient implements ClientModInitializer {
         instance = this;
         hudManager = new HudManager();
         KeyBindings.register();
+        MaceEnchantmentVisuals.registerTooltipColors();
+        spotifyService.initializeFromState(this);
         
         HudRenderCallback.EVENT.register((context, tickDelta) -> {
             hudManager.render(context, tickDelta.getGameTimeDeltaTicks());
@@ -25,6 +30,8 @@ public class ClientClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             hudManager.tick(client);
         });
+
+        Runtime.getRuntime().addShutdownHook(new Thread(spotifyService::shutdown, "xenon-spotify-shutdown"));
     }
     
     public static ClientClient getInstance() {
@@ -33,6 +40,10 @@ public class ClientClient implements ClientModInitializer {
     
     public static HudManager getHudManager() {
         return hudManager;
+    }
+
+    public static SpotifyService getSpotifyService() {
+        return spotifyService;
     }
 
     public UIState getUiState() {
@@ -62,6 +73,14 @@ public class ClientClient implements ClientModInitializer {
     
     public void setCustomCrosshairEnabled(boolean enabled) {
         CrosshairCustomizer.setEnabled(enabled);
+    }
+
+    public String getCustomCrosshairPattern() {
+        return CrosshairCustomizer.getCustomPattern();
+    }
+
+    public void setCustomCrosshairPattern(String pattern) {
+        CrosshairCustomizer.setCustomPattern(pattern);
     }
 
     public String getCurrentFilter() {
@@ -126,5 +145,45 @@ public class ClientClient implements ClientModInitializer {
 
     public void setLightModeThresholdFps(int fps) {
         uiState.setLightModeThresholdFps(fps);
+    }
+
+    public boolean isSpotifyEnabled() {
+        return uiState.isSpotifyEnabled();
+    }
+
+    public void setSpotifyEnabled(boolean spotifyEnabled) {
+        uiState.setSpotifyEnabled(spotifyEnabled);
+    }
+
+    public boolean isSpotifyHudEnabled() {
+        return uiState.isSpotifyHudEnabled();
+    }
+
+    public void setSpotifyHudEnabled(boolean spotifyHudEnabled) {
+        uiState.setSpotifyHudEnabled(spotifyHudEnabled);
+    }
+
+    public String getSpotifyClientId() {
+        return uiState.getSpotifyClientId();
+    }
+
+    public void setSpotifyClientId(String spotifyClientId) {
+        uiState.setSpotifyClientId(spotifyClientId);
+    }
+
+    public int getSpotifyRefreshIntervalMs() {
+        return uiState.getSpotifyRefreshIntervalMs();
+    }
+
+    public void setSpotifyRefreshIntervalMs(int spotifyRefreshIntervalMs) {
+        uiState.setSpotifyRefreshIntervalMs(spotifyRefreshIntervalMs);
+    }
+
+    public boolean isSpotifyCompactView() {
+        return uiState.isSpotifyCompactView();
+    }
+
+    public void setSpotifyCompactView(boolean spotifyCompactView) {
+        uiState.setSpotifyCompactView(spotifyCompactView);
     }
 }

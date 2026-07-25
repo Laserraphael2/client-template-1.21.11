@@ -9,6 +9,11 @@ public class UIState {
     private boolean wizardCompleted = false;
     private boolean lightModeEnabled = false;
     private int lightModeThresholdFps = 45;
+    private boolean spotifyEnabled = true;
+    private boolean spotifyHudEnabled = true;
+    private String spotifyClientId = "";
+    private int spotifyRefreshIntervalMs = 1000;
+    private boolean spotifyCompactView = false;
 
     public String getCurrentFilter() {
         return currentFilter;
@@ -72,5 +77,45 @@ public class UIState {
 
     public void setLightModeThresholdFps(int lightModeThresholdFps) {
         this.lightModeThresholdFps = Math.max(20, Math.min(240, lightModeThresholdFps));
+    }
+
+    public boolean isSpotifyEnabled() {
+        return spotifyEnabled;
+    }
+
+    public void setSpotifyEnabled(boolean spotifyEnabled) {
+        this.spotifyEnabled = spotifyEnabled;
+    }
+
+    public boolean isSpotifyHudEnabled() {
+        return spotifyHudEnabled;
+    }
+
+    public void setSpotifyHudEnabled(boolean spotifyHudEnabled) {
+        this.spotifyHudEnabled = spotifyHudEnabled;
+    }
+
+    public String getSpotifyClientId() {
+        return spotifyClientId;
+    }
+
+    public void setSpotifyClientId(String spotifyClientId) {
+        this.spotifyClientId = spotifyClientId == null ? "" : spotifyClientId.trim();
+    }
+
+    public int getSpotifyRefreshIntervalMs() {
+        return spotifyRefreshIntervalMs;
+    }
+
+    public void setSpotifyRefreshIntervalMs(int spotifyRefreshIntervalMs) {
+        this.spotifyRefreshIntervalMs = Math.max(750, Math.min(5000, spotifyRefreshIntervalMs));
+    }
+
+    public boolean isSpotifyCompactView() {
+        return spotifyCompactView;
+    }
+
+    public void setSpotifyCompactView(boolean spotifyCompactView) {
+        this.spotifyCompactView = spotifyCompactView;
     }
 }

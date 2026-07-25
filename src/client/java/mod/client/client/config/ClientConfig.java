@@ -182,9 +182,15 @@ public class ClientConfig {
         ui.addProperty("wizardCompleted", uiState.isWizardCompleted());
         ui.addProperty("lightModeEnabled", uiState.isLightModeEnabled());
         ui.addProperty("lightModeThresholdFps", uiState.getLightModeThresholdFps());
+        ui.addProperty("spotifyEnabled", uiState.isSpotifyEnabled());
+        ui.addProperty("spotifyHudEnabled", uiState.isSpotifyHudEnabled());
+        ui.addProperty("spotifyClientId", uiState.getSpotifyClientId());
+        ui.addProperty("spotifyRefreshIntervalMs", uiState.getSpotifyRefreshIntervalMs());
+        ui.addProperty("spotifyCompactView", uiState.isSpotifyCompactView());
         ui.addProperty("crosshairEnabled", clientState.isCustomCrosshairEnabled());
         ui.addProperty("crosshairType", clientState.getCrosshairType().name());
         ui.addProperty("crosshairColor", clientState.getCrosshairColor());
+        ui.addProperty("crosshairPattern", clientState.getCustomCrosshairPattern());
         root.add("ui", ui);
         return root;
     }
@@ -217,8 +223,14 @@ public class ClientConfig {
             if (ui.has("wizardCompleted")) uiState.setWizardCompleted(ui.get("wizardCompleted").getAsBoolean());
             if (ui.has("lightModeEnabled")) uiState.setLightModeEnabled(ui.get("lightModeEnabled").getAsBoolean());
             if (ui.has("lightModeThresholdFps")) uiState.setLightModeThresholdFps(ui.get("lightModeThresholdFps").getAsInt());
+            if (ui.has("spotifyEnabled")) uiState.setSpotifyEnabled(ui.get("spotifyEnabled").getAsBoolean());
+            if (ui.has("spotifyHudEnabled")) uiState.setSpotifyHudEnabled(ui.get("spotifyHudEnabled").getAsBoolean());
+            if (ui.has("spotifyClientId")) uiState.setSpotifyClientId(ui.get("spotifyClientId").getAsString());
+            if (ui.has("spotifyRefreshIntervalMs")) uiState.setSpotifyRefreshIntervalMs(ui.get("spotifyRefreshIntervalMs").getAsInt());
+            if (ui.has("spotifyCompactView")) uiState.setSpotifyCompactView(ui.get("spotifyCompactView").getAsBoolean());
             if (ui.has("crosshairEnabled")) clientState.setCustomCrosshairEnabled(ui.get("crosshairEnabled").getAsBoolean());
             if (ui.has("crosshairColor")) clientState.setCrosshairColor(ui.get("crosshairColor").getAsInt());
+            if (ui.has("crosshairPattern")) clientState.setCustomCrosshairPattern(ui.get("crosshairPattern").getAsString());
             if (ui.has("crosshairType")) {
                 try {
                     clientState.setCrosshairType(mod.client.client.render.CrosshairCustomizer.CrosshairType.valueOf(ui.get("crosshairType").getAsString()));

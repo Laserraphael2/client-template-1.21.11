@@ -6,12 +6,19 @@ import mod.client.client.modules.HudModule;
 import mod.client.client.render.CrosshairCustomizer;
 import mod.client.client.render.RenderUtils;
 import mod.client.client.render.XenonTheme;
+import mod.client.client.spotify.SpotifyDevice;
+import mod.client.client.spotify.SpotifyPlaylist;
+import mod.client.client.spotify.SpotifySearchTrack;
+import mod.client.client.spotify.SpotifyService;
+import mod.client.client.spotify.SpotifySnapshot;
+import mod.client.client.spotify.SpotifyTrack;
 import mod.client.client.screen.panels.AboutPanel;
 import mod.client.client.screen.panels.ConfigPanel;
 import mod.client.client.screen.panels.ModulesPanel;
 import mod.client.client.screen.panels.PerformancePanel;
 import mod.client.client.screen.panels.PositionsPanel;
 import mod.client.client.screen.panels.SettingsPanel;
+import mod.client.client.screen.panels.SpotifyPanel;
 import mod.client.client.util.KeyNameUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -23,28 +30,45 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 public class XenonMenuScreen extends Screen {
 
-    private static final int WIN_W = 872;
-    private static final int WIN_H = 590;
+    private static final int WIN_W = 760;
+    private static final int WIN_H = 500;
+    private static final float MIN_UI_SCALE = 0.4f;
+    private static final float MAX_UI_SCALE = 1.0f;
+    private static final float UI_SCALE_STEP = 0.1f;
+    private static final long CLICK_ANIMATION_MS = 240L;
 
     private static final int SIDEBAR_W = 60;
-    private static final int HEADER_H = 52;
+    private static final int HEADER_H = 46;
     private static final int POSITION_DONE_W = 140;
     private static final int POSITION_DONE_H = 26;
-    private static final int MODULE_CARD_H = 96;
-    private static final int MODULE_GAP = 5;
+    private static final int MODULE_CARD_H = 84;
+    private static final int MODULE_GAP = 6;
     private static final int SIDEBAR_ICON_SIZE = 16;
     private static final int MODULE_BADGE_SIZE = 26;
     private static final int EDGE_MARGIN = 14;
+    private static final int SPOTIFY_APP_X = 68;
+    private static final int SPOTIFY_APP_Y = 56;
+    private static final int SPOTIFY_LEFT_W = 300;
+    private static final int CROSSHAIR_EDITOR_X = 480;
+    private static final int CROSSHAIR_EDITOR_Y = 166;
+    private static final int CROSSHAIR_EDITOR_CELL = 12;
     private static final String[] FILTERS = {"All", "New", "HUD", "Hypixel", "PvP"};
 
     private int winX;
     private int winY;
+    private float uiScale = 0.5f;
+    private int clickAnimX;
+    private int clickAnimY;
+    private long clickAnimStartedAt;
 
     private float openAnim = 0.0f;
 
@@ -57,10 +81,16 @@ public class XenonMenuScreen extends Screen {
     private int moduleDragOffsetY;
 
     private int draggingSlider; // 0=none, 1=red, 2=green, 3=blue
+    private boolean drawingCrosshair;
+    private boolean crosshairDrawValue;
     private boolean searchFocused;
     private boolean confirmReset;
     private boolean wizardVisible;
     private boolean presetNameFocused;
+    private boolean spotifyClientIdFocused;
+    private boolean spotifyRefreshFocused;
+    private boolean spotifyDeviceSearchFocused;
+    private boolean spotifySearchFocused;
 
     private HudModule awaitingKeybindModule;
 
@@ -78,12 +108,37 @@ public class XenonMenuScreen extends Screen {
     private int crosshairBlue;
     private boolean customCrosshairEnabled;
     private String presetName = "default";
+    private String spotifyClientIdInput = "";
+    private String spotifyRefreshInput = "1000";
+    private String spotifyDeviceSearchQuery = "";
+    private int spotifyDeviceScroll;
+    private int spotifyDeviceMaxScroll;
+    private boolean spotifyCompactView;
+    private String spotifyAlbumArtKey = "";
+    private final int[] spotifyAlbumArtPixels = new int[64];
+    private boolean spotifyAlbumArtReady;
+    private boolean spotifyVolumeDragging;
+    private int spotifyLiveVolume = 50;
+    private String spotifySearchInput = "";
+    private int spotifySearchScroll;
+    private int spotifySearchMaxScroll;
+    private int spotifyLibraryScroll;
+    private int spotifyLibraryMaxScroll;
+
+    private enum SpotifyView {
+        HOME,
+        SEARCH,
+        LIBRARY
+    }
+
+    private SpotifyView spotifyView = SpotifyView.HOME;
 
     private enum Tab {
         MODULES,
         SETTINGS,
         POSITIONS,
         CHAT,
+        SPOTIFY,
         PERFORMANCE,
         CONFIG,
         ABOUT
@@ -97,6 +152,7 @@ public class XenonMenuScreen extends Screen {
     private final PerformancePanel performancePanel = new PerformancePanel(this);
     private final ConfigPanel configPanel = new ConfigPanel(this);
     private final AboutPanel aboutPanel = new AboutPanel(this);
+    private final SpotifyPanel spotifyPanel = new SpotifyPanel(this);
 
     public XenonMenuScreen() {
         super(Component.literal("XENON"));
@@ -107,6 +163,9 @@ public class XenonMenuScreen extends Screen {
         this.crosshairGreen = (color >> 8) & 0xFF;
         this.crosshairBlue = color & 0xFF;
         this.customCrosshairEnabled = client.isCustomCrosshairEnabled();
+        this.spotifyClientIdInput = client.getSpotifyClientId();
+        this.spotifyRefreshInput = Integer.toString(client.getSpotifyRefreshIntervalMs());
+        this.spotifyCompactView = client.isSpotifyCompactView();
         this.currentFilter = "All";
         this.searchQuery = "";
     }
@@ -114,12 +173,14 @@ public class XenonMenuScreen extends Screen {
     @Override
     protected void init() {
         ClientClient state = ClientClient.getInstance();
+        int logicalWidth = Math.round(this.width / uiScale);
+        int logicalHeight = Math.round(this.height / uiScale);
         if (state.getMenuX() >= 0 && state.getMenuY() >= 0) {
-            this.winX = clamp(state.getMenuX(), 0, Math.max(0, this.width - WIN_W));
-            this.winY = clamp(state.getMenuY(), 0, Math.max(0, this.height - WIN_H));
+            this.winX = clamp(state.getMenuX(), 0, Math.max(0, logicalWidth - WIN_W));
+            this.winY = clamp(state.getMenuY(), 0, Math.max(0, logicalHeight - WIN_H));
         } else {
-            this.winX = (this.width - WIN_W) / 2;
-            this.winY = (this.height - WIN_H) / 2;
+            this.winX = (logicalWidth - WIN_W) / 2;
+            this.winY = (logicalHeight - WIN_H) / 2;
         }
 
         wizardVisible = !state.isWizardCompleted();
@@ -141,8 +202,11 @@ public class XenonMenuScreen extends Screen {
             return;
         }
 
-        ctx.fill(0, 0, this.width, this.height, applyAlpha(0x55000000, openAnim));
-        renderWindow(ctx, mouseX, mouseY);
+        ctx.fill(0, 0, this.width, this.height, applyAlpha(0x44000000, openAnim));
+        ctx.pose().pushMatrix();
+        ctx.pose().scale(uiScale, uiScale);
+        renderWindow(ctx, toLogical(mouseX), toLogical(mouseY));
+        ctx.pose().popMatrix();
         super.render(ctx, mouseX, mouseY, partialTick);
     }
 
@@ -152,9 +216,9 @@ public class XenonMenuScreen extends Screen {
         int drawX = winX;
         int drawY = winY + (int) ((1.0f - openAnim) * 10.0f);
 
-        int contentBg = fadeAlpha(0xFF0E1320, 0.82f);
-        int sidebarBg = fadeAlpha(0xFF0A1018, 0.88f);
-        int headerBg = fadeAlpha(0xFF111829, 0.90f);
+        int contentBg = 0xE8F4FCFF;
+        int sidebarBg = 0xDEEEFAFF;
+        int headerBg = 0xE0F0FBFF;
 
         RenderUtils.drawGlassPanel(ctx, drawX, drawY, WIN_W, WIN_H, 8, applyAlpha(contentBg, openAnim), applyAlpha(theme.accent, openAnim));
         RenderUtils.drawGlassPanel(ctx, drawX, drawY, SIDEBAR_W, WIN_H, 8, applyAlpha(sidebarBg, openAnim), applyAlpha(theme.accent, openAnim));
@@ -169,10 +233,13 @@ public class XenonMenuScreen extends Screen {
             case SETTINGS -> settingsPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case POSITIONS -> positionsPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case CHAT -> renderComingSoon(ctx, drawX, drawY, "Chat Options coming soon...");
+            case SPOTIFY -> spotifyPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case PERFORMANCE -> performancePanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case CONFIG -> configPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case ABOUT -> aboutPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
         }
+
+        renderClickAnimation(ctx, theme.accent);
 
         if (wizardVisible) {
             renderFirstRunWizard(ctx, mouseX, mouseY, drawX, drawY, theme);
@@ -205,6 +272,10 @@ public class XenonMenuScreen extends Screen {
 
     public void renderAboutPanel(GuiGraphics ctx, int drawX, int drawY, XenonTheme theme) {
         renderAbout(ctx, drawX, drawY, theme);
+    }
+
+    public void renderSpotifyPanel(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
+        renderSpotify(ctx, mouseX, mouseY, drawX, drawY, theme);
     }
 
     public boolean handlePositionsPanelClick(int absX, int absY) {
@@ -295,8 +366,10 @@ public class XenonMenuScreen extends Screen {
         return true;
     }
 
-    public boolean handleSettingsPanelClick(int mx, int my) {
-        handleSettingsClick(mx, my);
+    public boolean handleSettingsPanelClick(int mx, int my, int button) {
+        if (button == 0 || button == 1) {
+            handleSettingsClick(mx, my, button);
+        }
         return true;
     }
 
@@ -305,14 +378,20 @@ public class XenonMenuScreen extends Screen {
         return true;
     }
 
+    public boolean handleSpotifyPanelClick(int mx, int my) {
+        handleSpotifyClick(mx, my);
+        return true;
+    }
+
     private void renderSidebar(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
         renderSidebarTab(ctx, mouseX, mouseY, Tab.MODULES, 68, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.SETTINGS, 122, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.POSITIONS, 176, drawX, drawY, theme.accent);
         renderSidebarTab(ctx, mouseX, mouseY, Tab.CHAT, 230, drawX, drawY, theme.accent);
-        renderSidebarTab(ctx, mouseX, mouseY, Tab.PERFORMANCE, 284, drawX, drawY, theme.accent);
-        renderSidebarTab(ctx, mouseX, mouseY, Tab.CONFIG, 338, drawX, drawY, theme.accent);
-        renderSidebarTab(ctx, mouseX, mouseY, Tab.ABOUT, 392, drawX, drawY, theme.accent);
+        renderSidebarTab(ctx, mouseX, mouseY, Tab.SPOTIFY, 284, drawX, drawY, theme.accent);
+        renderSidebarTab(ctx, mouseX, mouseY, Tab.PERFORMANCE, 338, drawX, drawY, theme.accent);
+        renderSidebarTab(ctx, mouseX, mouseY, Tab.CONFIG, 392, drawX, drawY, theme.accent);
+        renderSidebarTab(ctx, mouseX, mouseY, Tab.ABOUT, 446, drawX, drawY, theme.accent);
     }
 
     private void renderSidebarTab(GuiGraphics ctx, int mouseX, int mouseY, Tab tab, int localY, int drawX, int drawY, int accent) {
@@ -323,12 +402,12 @@ public class XenonMenuScreen extends Screen {
         boolean active = currentTab == tab;
         boolean hover = inside(mouseX, mouseY, boxX, y, boxW, boxH);
 
-        int bg = active ? 0xC0222D3F : (hover ? 0xB4161D2A : 0xA4121620);
+        int bg = active ? 0xF0FCFFFF : (hover ? 0xECF8FEFF : 0xE5F5FDFF);
         RenderUtils.drawGlassPanel(ctx, boxX, y, boxW, boxH, 8, bg, accent);
         RenderUtils.drawGlassHoverOverlay(ctx, boxX, y, boxW, boxH, hover || active, accent);
 
         if (active) {
-            ctx.fill(boxX - 3, y + 9, boxX - 1, y + boxH - 9, accent);
+            RenderUtils.drawRoundedRect(ctx, boxX - 3, y + 9, 2, boxH - 18, 1, accent);
         }
 
         int iconX = boxX + (boxW - SIDEBAR_ICON_SIZE) / 2;
@@ -339,44 +418,42 @@ public class XenonMenuScreen extends Screen {
     private void renderTopBar(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
         int barX = drawX + SIDEBAR_W;
         int barY = drawY;
-        int barW = WIN_W - SIDEBAR_W;
 
         int closeX = drawX + 12;
         int closeY = drawY + 8;
-        RenderUtils.drawGlassPanel(ctx, closeX, closeY, 42, 34, 8, 0xB3131720, theme.accent);
-        ctx.drawString(this.font, "X", closeX + 15, closeY + 10, 0xFFE7ECF7, true);
+        RenderUtils.drawGlassPanel(ctx, closeX, closeY, 42, 30, 8, 0xEEFAFFFF, theme.accent);
+        ctx.drawString(this.font, "X", closeX + 15, closeY + 10, RenderUtils.TEXT_COLOR, true);
 
-        RenderUtils.drawGlassPanel(ctx, barX + 54, barY + 10, 184, 30, 7, 0xB4151B28, theme.accent);
-        drawSlantedHeader(ctx, barX + 54, barY + 10, 184, 30, 18, 0xB4151B28, 0xFF0B111B);
-        ctx.drawString(this.font, "Med Menu", barX + 70, barY + 20, 0xFFF4F7FF, true);
+        RenderUtils.drawGlassPanel(ctx, barX + 54, barY + 10, 146, 26, 6, 0xEEFAFFFF, theme.accent);
+        ctx.drawString(this.font, "Menu", barX + 69, barY + 18, RenderUtils.TEXT_COLOR, true);
 
-        int fx = barX + 260;
+        int filterW = 56;
+        int filterH = 26;
+        int filterStep = 60;
+        int fx = barX + 212;
 
         for (String filter : FILTERS) {
             boolean active = currentFilter.equals(filter);
-            boolean hover = inside(mouseX, mouseY, fx, drawY + 10, 62, 30);
-            int color = active ? 0xC0233044 : (hover ? 0xB41E2634 : 0x9E151C27);
-            RenderUtils.drawGlassPanel(ctx, fx, drawY + 10, 62, 30, 7, color, theme.accent);
-            ctx.drawString(this.font, filter, fx + (62 - this.font.width(filter)) / 2, drawY + 19, 0xFFF3F6FF, false);
-            fx += 68;
+            boolean hover = inside(mouseX, mouseY, fx, drawY + 10, filterW, filterH);
+            int color = active ? 0xF5FCFFFF : (hover ? 0xF0FAFFFF : 0xECF8FEFF);
+            RenderUtils.drawGlassPanel(ctx, fx, drawY + 10, filterW, filterH, 6, color, theme.accent);
+            ctx.drawString(this.font, filter, fx + (filterW - this.font.width(filter)) / 2, drawY + 18, RenderUtils.TEXT_COLOR, false);
+            fx += filterStep;
         }
 
-        int searchW = 160;
+        int searchW = 146;
         int searchX = drawX + WIN_W - searchW - 12;
-        RenderUtils.drawGlassPanel(ctx, searchX, drawY + 10, searchW, 30, 7, searchFocused ? 0xC0223041 : 0xB3131822, theme.accent);
+        RenderUtils.drawGlassPanel(ctx, searchX, drawY + 10, searchW, 26, 6, searchFocused ? 0xF5FCFFFF : 0xECF8FEFF, theme.accent);
         String text = searchQuery.isEmpty() ? "Search" : searchQuery;
-        int color = searchQuery.isEmpty() ? 0xFF8A95A7 : 0xFFFFFFFF;
-        ctx.drawString(this.font, text, searchX + 22, drawY + 19, color, false);
-        ctx.drawString(this.font, "\u2022", searchX + 10, drawY + 18, 0xFF9DA6B5, false);
+        int color = searchQuery.isEmpty() ? RenderUtils.MUTED_COLOR : RenderUtils.TEXT_COLOR;
+        ctx.drawString(this.font, text, searchX + 18, drawY + 18, color, false);
 
-        String countText = "0%";
-        ctx.drawString(this.font, countText, drawX + WIN_W / 2 - this.font.width(countText) / 2, drawY + WIN_H - 18, 0xFF9EA7B7, false);
     }
 
     private void renderModuleGrid(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
         int startX = drawX + SIDEBAR_W + 12;
-        int startY = drawY + HEADER_H + 12;
-        int contentBottom = drawY + WIN_H - 30;
+        int startY = drawY + HEADER_H + 10;
+        int contentBottom = drawY + WIN_H - 22;
         int cardW = (WIN_W - SIDEBAR_W - 40) / 3;
         int cardH = MODULE_CARD_H;
         int gap = MODULE_GAP;
@@ -412,8 +489,8 @@ public class XenonMenuScreen extends Screen {
             boolean hover = inside(mouseX, mouseY, cx, cy, cardW, cardH);
             RenderUtils.drawModuleCard(ctx, cx, cy, cardW, cardH, hover, mod.isEnabled(), theme.accent);
 
-            RenderUtils.drawSmallButton(ctx, cx + 10, cy + 7, 40, 16, 0xC0181F2B);
-            ctx.drawString(this.font, "Key", cx + 18, cy + 11, 0xFFD8DCE7, false);
+            RenderUtils.drawSmallButton(ctx, cx + 10, cy + 7, 40, 16, 0xECF8FEFF);
+            ctx.drawString(this.font, "Key", cx + 18, cy + 11, RenderUtils.TEXT_COLOR, false);
             
             int dotSize = 3;
             int dotX = cx + cardW - 10;
@@ -422,13 +499,13 @@ public class XenonMenuScreen extends Screen {
 
             String label = getModuleAbbreviation(mod.getName());
             int labelY = cy + 36;
-            ctx.drawString(this.font, label, cx + (cardW - this.font.width(label)) / 2, labelY, 0xFFF4F7FF, true);
+            ctx.drawString(this.font, label, cx + (cardW - this.font.width(label)) / 2, labelY, RenderUtils.TEXT_COLOR, true);
 
             int sepY = cy + cardH - 40;
-            RenderUtils.drawSeparator(ctx, cx + 10, sepY, cardW - 20, 0x66394660);
+            RenderUtils.drawSeparator(ctx, cx + 10, sepY, cardW - 20, 0x3000D9FF);
             
             int nameY = cy + cardH - 30;
-            ctx.drawString(this.font, mod.getName(), cx + 10, nameY, 0xFFE7ECF7, false);
+            ctx.drawString(this.font, mod.getName(), cx + 10, nameY, RenderUtils.TEXT_COLOR, false);
             
             int toggleX = cx + cardW - 28;
             int toggleY = cy + cardH - 27;
@@ -437,80 +514,107 @@ public class XenonMenuScreen extends Screen {
             int icon1X = cx + cardW - 52;
             int icon2X = cx + cardW - 70;
             int iconY = cy + cardH - 29;
-            RenderUtils.drawSmallButton(ctx, icon1X, iconY, 16, 16, 0xA0202838);
-            RenderUtils.drawSmallButton(ctx, icon2X, iconY, 16, 16, 0xA0202838);
+            RenderUtils.drawSmallButton(ctx, icon1X, iconY, 16, 16, 0xECF8FEFF);
+            RenderUtils.drawSmallButton(ctx, icon2X, iconY, 16, 16, 0xECF8FEFF);
             
-            ctx.fill(icon1X + 5, iconY + 5, icon1X + 11, iconY + 7, 0xFFAAB7CC);
-            ctx.fill(icon1X + 5, iconY + 9, icon1X + 11, iconY + 11, 0xFFAAB7CC);
+            ctx.fill(icon1X + 5, iconY + 5, icon1X + 11, iconY + 7, RenderUtils.TEXT_COLOR);
+            ctx.fill(icon1X + 5, iconY + 9, icon1X + 11, iconY + 11, RenderUtils.TEXT_COLOR);
             
             if (mod.isEnabled()) {
-                ctx.fill(icon2X + 6, iconY + 6, icon2X + 10, iconY + 10, 0xFF43B581);
+                ctx.fill(icon2X + 6, iconY + 6, icon2X + 10, iconY + 10, theme.accent);
             } else {
-                ctx.fill(icon2X + 6, iconY + 6, icon2X + 10, iconY + 10, 0xFF6A7590);
+                ctx.fill(icon2X + 6, iconY + 6, icon2X + 10, iconY + 10, RenderUtils.MUTED_COLOR);
             }
 
             String keyText = mod.getKeybind() >= 0 ? KeyNameUtils.format(mod.getKeybind()) : "None";
-            String status = (mod.isEnabled() ? "On" : "Orr") + " I " + keyText + " I " + formatScale(mod.getScale());
-            ctx.drawString(this.font, status, cx + 10, cy + cardH - 14, 0xFF8A95A7, false);
+            String status = (mod.isEnabled() ? "On" : "Off") + " | " + keyText + " | " + formatScale(mod.getScale());
+            ctx.drawString(this.font, status, cx + 10, cy + cardH - 13, RenderUtils.MUTED_COLOR, false);
         }
 
         if (awaitingKeybindModule != null) {
-            ctx.drawString(this.font, "Press any key to bind. ESC clears.", drawX + 86, drawY + WIN_H - 18, theme.accent, true);
+            ctx.drawString(this.font, "Press any key to bind. ESC clears.", drawX + 86, drawY + WIN_H - 18, 0xFF00D9FF, true);
         }
 
         if (maxScroll > 0) {
             int trackX = drawX + WIN_W - 8;
             int trackY = startY;
             int trackH = contentBottom - startY;
-            RenderUtils.drawRoundedRect(ctx, trackX, trackY, 3, trackH, 1, 0x331A1A1A);
+            RenderUtils.drawRoundedRect(ctx, trackX, trackY, 3, trackH, 1, 0x20B0D8F0);
 
             int thumbH = Math.max(18, (int) ((trackH / (float) (trackH + maxScroll)) * trackH));
             int thumbY = trackY + (int) ((moduleGridScroll / (float) maxScroll) * (trackH - thumbH));
-            RenderUtils.drawRoundedRect(ctx, trackX, thumbY, 3, thumbH, 1, theme.accent);
+            RenderUtils.drawRoundedRect(ctx, trackX, thumbY, 3, thumbH, 1, 0xFF00D9FF);
         }
     }
 
     private void renderSettings(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
-        int x = drawX + 68;
-        int y = drawY + 60;
+        int x = drawX + 76;
+        int y = drawY + 62;
 
-        ctx.drawString(this.font, "Crosshair", x, y, 0xFFFFFFFF, true);
-        y += 20;
+        ctx.drawString(this.font, "Crosshair Editor", x, y, RenderUtils.TEXT_COLOR, true);
+        RenderUtils.drawGlassPanel(ctx, x, y + 18, 140, 24, 7, 0xD8FFFFFF, theme.accent);
+        if (customCrosshairEnabled) {
+            RenderUtils.drawRoundedRect(ctx, x + 4, y + 22, 4, 16, 2, theme.accent);
+        }
+        ctx.drawString(this.font, customCrosshairEnabled ? "Crosshair enabled" : "Crosshair disabled", x + 14, y + 26,
+            customCrosshairEnabled ? RenderUtils.TEXT_COLOR : RenderUtils.MUTED_COLOR, false);
 
-        RenderUtils.drawRoundedRect(ctx, x, y, 120, 20, 0, customCrosshairEnabled ? theme.accent : 0xFF333333);
-        ctx.drawString(this.font, customCrosshairEnabled ? "Custom: ON" : "Custom: OFF", x + 10, y + 6, 0xFFFFFFFF, false);
-
+        int typeY = y + 52;
         int tx = x;
         for (CrosshairCustomizer.CrosshairType type : CrosshairCustomizer.CrosshairType.values()) {
             boolean active = type == crosshairType;
-            boolean hover = inside(mouseX, mouseY, tx, y, 70, 20);
-            RenderUtils.drawRoundedRect(ctx, tx, y, 70, 20, 0, active ? theme.accent : (hover ? 0xFF2A2A2A : 0xFF222222));
-            ctx.drawString(this.font, type.name(), tx + 8, y + 6, 0xFFFFFFFF, false);
-            tx += 76;
+            boolean hover = inside(mouseX, mouseY, tx, typeY, 78, 24);
+            RenderUtils.drawGlassPanel(ctx, tx, typeY, 78, 24, 6, active || hover ? 0xE8FFFFFF : 0xC8FFFFFF, active ? theme.accent : 0xFF607080);
+            ctx.drawString(this.font, type.name(), tx + (78 - this.font.width(type.name())) / 2, typeY + 8,
+                active ? theme.accent : RenderUtils.TEXT_COLOR, false);
+            tx += 84;
         }
 
-        y += 32;
-        renderColorSlider(ctx, "R", x, y, crosshairRed, 1, drawX, theme.accent);
-        y += 28;
-        renderColorSlider(ctx, "G", x, y, crosshairGreen, 2, drawX, theme.accent);
-        y += 28;
-        renderColorSlider(ctx, "B", x, y, crosshairBlue, 3, drawX, theme.accent);
+        renderColorSlider(ctx, "R", x, y + 96, crosshairRed, 1, theme.accent);
+        renderColorSlider(ctx, "G", x, y + 128, crosshairGreen, 2, theme.accent);
+        renderColorSlider(ctx, "B", x, y + 160, crosshairBlue, 3, theme.accent);
 
-        y += 36;
-        ctx.drawString(this.font, "Preview", x, y, 0xFFFFFFFF, false);
-        renderCrosshairPreview(ctx, x + 75, y + 18);
+        int previewX = x + 322;
+        int previewY = y + 128;
+        RenderUtils.drawGlassPanel(ctx, previewX, previewY, 74, 74, 10, 0xCCFFFFFF, theme.accent);
+        ctx.drawString(this.font, "Preview", previewX + 18, previewY + 8, RenderUtils.MUTED_COLOR, false);
+        renderCrosshairPreview(ctx, previewX + 37, previewY + 44);
 
-        y += 45;
-        RenderUtils.drawSeparator(ctx, x, y, WIN_W - 90, RenderUtils.SEPARATOR_COLOR);
-        y += 10;
+        int editorX = drawX + CROSSHAIR_EDITOR_X;
+        int editorY = drawY + CROSSHAIR_EDITOR_Y;
+        int gridSize = CrosshairCustomizer.CUSTOM_GRID_SIZE * CROSSHAIR_EDITOR_CELL;
+        ctx.drawString(this.font, "Draw your own", editorX, editorY - 16, RenderUtils.TEXT_COLOR, true);
+        RenderUtils.drawGlassPanel(ctx, editorX - 5, editorY - 5, gridSize + 10, gridSize + 10, 9, 0xD4FFFFFF, theme.accent);
+        ctx.fill(editorX, editorY, editorX + gridSize, editorY + gridSize, 0xA806090D);
+        for (int row = 0; row < CrosshairCustomizer.CUSTOM_GRID_SIZE; row++) {
+            for (int column = 0; column < CrosshairCustomizer.CUSTOM_GRID_SIZE; column++) {
+                if (CrosshairCustomizer.isCustomPixelSet(column, row)) {
+                    int cellX = editorX + column * CROSSHAIR_EDITOR_CELL;
+                    int cellY = editorY + row * CROSSHAIR_EDITOR_CELL;
+                    RenderUtils.drawRoundedRect(ctx, cellX + 2, cellY + 2, CROSSHAIR_EDITOR_CELL - 3, CROSSHAIR_EDITOR_CELL - 3, 3,
+                        0xFF000000 | (crosshairRed << 16) | (crosshairGreen << 8) | crosshairBlue);
+                }
+            }
+        }
+        for (int line = 1; line < CrosshairCustomizer.CUSTOM_GRID_SIZE; line++) {
+            int offset = line * CROSSHAIR_EDITOR_CELL;
+            ctx.fill(editorX + offset, editorY, editorX + offset + 1, editorY + gridSize, 0x1839D8FF);
+            ctx.fill(editorX, editorY + offset, editorX + gridSize, editorY + offset + 1, 0x1839D8FF);
+        }
+        RenderUtils.drawGlassPanel(ctx, editorX, editorY + gridSize + 10, 64, 22, 6, 0xCCFFFFFF, theme.accent);
+        ctx.drawString(this.font, "Clear", editorX + 18, editorY + gridSize + 17, RenderUtils.TEXT_COLOR, false);
+        ctx.drawString(this.font, "LMB draw  RMB erase", editorX + 70, editorY + gridSize + 17, RenderUtils.MUTED_COLOR, false);
 
-        ctx.drawString(this.font, "Theme", x, y, 0xFFFFFFFF, false);
-        int bx = x + 45;
+        int themeY = drawY + 360;
+        RenderUtils.drawSeparator(ctx, x, themeY - 12, WIN_W - 106, 0x2839D8FF);
+        ctx.drawString(this.font, "Theme", x, themeY, RenderUtils.TEXT_COLOR, false);
+        int bx = x + 48;
         for (XenonTheme entry : XenonTheme.values()) {
             boolean active = entry.name().equalsIgnoreCase(ClientClient.getInstance().getThemeId());
-            RenderUtils.drawRoundedRect(ctx, bx, y - 4, 60, 18, 0, active ? entry.accent : 0xFF2A2A2A);
-            ctx.drawString(this.font, entry.name(), bx + 8, y + 1, 0xFFFFFFFF, false);
-            bx += 66;
+            RenderUtils.drawGlassPanel(ctx, bx, themeY - 5, 68, 22, 6, 0xD8FFFFFF, active ? entry.accent : 0xFF607080);
+            ctx.drawString(this.font, entry.name(), bx + (68 - this.font.width(entry.name())) / 2, themeY + 2,
+                active ? entry.accent : RenderUtils.TEXT_COLOR, false);
+            bx += 74;
         }
     }
 
@@ -657,6 +761,626 @@ public class XenonMenuScreen extends Screen {
         ctx.drawString(this.font, "+", x + 327, y + 6, 0xFFFFFFFF, false);
     }
 
+    private void renderSpotify(GuiGraphics ctx, int mouseX, int mouseY, int drawX, int drawY, XenonTheme theme) {
+        SpotifyService service = ClientClient.getSpotifyService();
+        SpotifySnapshot snapshot = service.getSnapshot();
+        SpotifyTrack track = snapshot.track();
+        List<SpotifyDevice> filteredDevices = getFilteredSpotifyDevices(snapshot);
+
+        updateSpotifyAlbumArtThumbnail(track);
+
+        int activeVolume = getActiveSpotifyVolume(snapshot);
+        spotifyLiveVolume = activeVolume;
+
+        int appX = drawX + SPOTIFY_APP_X;
+        int appY = drawY + SPOTIFY_APP_Y;
+        int appW = WIN_W - SIDEBAR_W - 80;
+        int appH = WIN_H - 74;
+        int gap = 12;
+        int leftW = SPOTIFY_LEFT_W;
+        int rightX = appX + leftW + gap;
+        int rightW = appW - leftW - gap;
+
+        int spotifyGreen = 0xFF1ED760;
+        RenderUtils.drawGlassPanel(ctx, appX, appY, appW, appH, 10, 0xECF8FEFF, spotifyGreen);
+        ctx.drawString(this.font, "Spotify", appX + 14, appY + 11, RenderUtils.TEXT_COLOR, true);
+        ctx.drawString(this.font, snapshot.status(), appX + 66, appY + 11, snapshot.authenticated() ? spotifyGreen : RenderUtils.MUTED_COLOR, false);
+
+        if (!snapshot.authenticated()) {
+            renderSpotifySetup(ctx, mouseX, mouseY, appX, appY, appW, appH, snapshot, spotifyGreen);
+            return;
+        }
+
+        int hudX = appX + appW - 164;
+        drawSpotifyControlButton(ctx, mouseX, mouseY, hudX, appY + 7, 76, 22,
+            ClientClient.getInstance().isSpotifyHudEnabled() ? "HUD On" : "HUD Off");
+        drawSpotifyDangerButton(ctx, mouseX, mouseY, appX + appW - 82, appY + 7, 70, 22, "Logout");
+
+        int leftX = appX + 12;
+        int sectionY = appY + 38;
+        int statusY = sectionY;
+        int statusH = 232;
+        RenderUtils.drawGlassPanel(ctx, leftX, statusY, leftW - 12, statusH, 8, 0xEEF9FDFF, 0xFF00D9FF);
+        ctx.drawString(this.font, "Now Playing", leftX + 10, statusY + 9, RenderUtils.TEXT_COLOR, false);
+
+        String trackTitle = track == null || track.title().isBlank() ? "No active playback" : track.title();
+        String trackArtist = track == null ? "Connect to Spotify and start music" : (track.artists().isBlank() ? "Unknown artist" : track.artists());
+        String trackAlbum = track == null ? "" : track.album();
+        String stateText = snapshot.status();
+        if (track != null) {
+            stateText = (track.playing() ? "Playing" : "Paused") + " | " + snapshot.status();
+        }
+
+        int coverSize = 112;
+        int coverX = leftX + (leftW - 12 - coverSize) / 2;
+        int coverY = statusY + 26;
+        RenderUtils.drawGlassPanel(ctx, coverX, coverY, coverSize, coverSize, 6, 0xF4FCFFFF, 0xFF00D9FF);
+        if (spotifyAlbumArtReady) {
+            int cell = Math.max(1, (coverSize - 8) / 8);
+            int px = coverX + 4;
+            int py = coverY + 4;
+            int index = 0;
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int color = spotifyAlbumArtPixels[index++];
+                    ctx.fill(px + (col * cell), py + (row * cell), px + ((col + 1) * cell), py + ((row + 1) * cell), color);
+                }
+            }
+        } else {
+            ctx.drawString(this.font, "No cover", coverX + 33, coverY + 52, RenderUtils.MUTED_COLOR, false);
+        }
+
+        int textY = coverY + coverSize + 10;
+        ctx.drawString(this.font, cropText(trackTitle, 38), leftX + 10, textY, RenderUtils.TEXT_COLOR, true);
+        ctx.drawString(this.font, cropText(trackArtist, 40), leftX + 10, textY + 14, RenderUtils.MUTED_COLOR, false);
+        if (!trackAlbum.isBlank()) {
+            ctx.drawString(this.font, cropText(trackAlbum, 40), leftX + 10, textY + 27, RenderUtils.MUTED_COLOR, false);
+        }
+
+        int durationMs = track == null ? 0 : track.durationMs();
+        int animatedProgressMs = track == null ? 0 : track.progressMs();
+        if (track != null && track.playing()) {
+            long elapsed = Math.max(0L, System.currentTimeMillis() - snapshot.lastUpdatedMs());
+            animatedProgressMs += (int) elapsed;
+        }
+        if (durationMs > 0) {
+            animatedProgressMs = Math.min(durationMs, animatedProgressMs);
+        }
+
+        float progress = 0.0f;
+        String timing = "00:00 / 00:00";
+        if (durationMs > 0) {
+            progress = Math.max(0.0f, Math.min(1.0f, animatedProgressMs / (float) durationMs));
+            timing = formatSpotifyTime(animatedProgressMs) + " / " + formatSpotifyTime(durationMs);
+        }
+        int progressY = statusY + 190;
+        RenderUtils.drawProgressBar(ctx, leftX + 10, progressY, leftW - 32, 8, progress, 0x30B0D8F0, 0xFF00D9FF);
+        ctx.drawString(this.font, timing, leftX + 10, progressY + 12, RenderUtils.MUTED_COLOR, false);
+        ctx.drawString(this.font, cropText(stateText, 24), leftX + 166, progressY + 12, RenderUtils.MUTED_COLOR, false);
+
+        int volLabelY = statusY + statusH + 12;
+        ctx.drawString(this.font, spotifyLiveVolume + "%", leftX + leftW - 42, volLabelY + 3, RenderUtils.MUTED_COLOR, false);
+        int volX = leftX + 42;
+        int volW = leftW - 96;
+        RenderUtils.drawRoundedRect(ctx, volX, volLabelY + 4, volW, 8, 4, 0x20B0D8F0);
+        int volFill = (int) ((spotifyLiveVolume / 100.0f) * volW);
+        RenderUtils.drawRoundedRect(ctx, volX, volLabelY + 4, Math.max(2, volFill), 8, 4, 0xFF00D9FF);
+        int volHandle = volX + Math.max(0, Math.min(volW - 4, volFill - 2));
+        RenderUtils.drawRoundedRect(ctx, volHandle, volLabelY + 2, 4, 12, 2, 0xFFF4FFFF);
+
+        int controlsY = volLabelY + 24;
+        drawSpotifyControlButton(ctx, mouseX, mouseY, leftX + 54, controlsY, 46, 34, "|<");
+        drawSpotifyControlButton(ctx, mouseX, mouseY, leftX + 108, controlsY - 4, 60, 42, track != null && track.playing() ? "||" : ">");
+        drawSpotifyControlButton(ctx, mouseX, mouseY, leftX + 176, controlsY, 46, 34, ">|");
+
+        int rightPanelX = rightX;
+        int rightPanelY = sectionY;
+        int rightPanelW = rightW - 12;
+        int rightPanelH = appH - 40;
+        RenderUtils.drawGlassPanel(ctx, rightPanelX, rightPanelY, rightPanelW, rightPanelH, 8, 0xEEF9FDFF, 0xFF00D9FF);
+        ctx.drawString(this.font, "Browse", rightPanelX + 10, rightPanelY + 9, RenderUtils.TEXT_COLOR, false);
+
+        int navY = rightPanelY + 24;
+        int navW = 82;
+        int navH = 22;
+        drawSpotifyViewButton(ctx, mouseX, mouseY, rightPanelX + 10, navY, navW, navH, "Home", spotifyView == SpotifyView.HOME);
+        drawSpotifyViewButton(ctx, mouseX, mouseY, rightPanelX + 98, navY, navW, navH, "Search", spotifyView == SpotifyView.SEARCH);
+        drawSpotifyViewButton(ctx, mouseX, mouseY, rightPanelX + 186, navY, navW, navH, "Library", spotifyView == SpotifyView.LIBRARY);
+
+        int contentX = rightPanelX + 10;
+        int contentY = navY + 30;
+        int contentW = rightPanelW - 20;
+        int contentH = rightPanelH - 40 - navH;
+
+        if (spotifyView == SpotifyView.HOME) {
+            renderSpotifyHomeContent(ctx, mouseX, mouseY, snapshot, filteredDevices, contentX, contentY, contentW, contentH);
+        } else if (spotifyView == SpotifyView.SEARCH) {
+            renderSpotifySearchContent(ctx, mouseX, mouseY, service, contentX, contentY, contentW, contentH);
+        } else {
+            renderSpotifyLibraryContent(ctx, mouseX, mouseY, service, contentX, contentY, contentW, contentH);
+        }
+    }
+
+    private void renderSpotifySetup(GuiGraphics ctx, int mouseX, int mouseY, int appX, int appY, int appW, int appH,
+                                    SpotifySnapshot snapshot, int spotifyGreen) {
+        int panelW = 360;
+        int panelH = 144;
+        int panelX = appX + (appW - panelW) / 2;
+        int panelY = appY + (appH - panelH) / 2;
+        RenderUtils.drawGlassPanel(ctx, panelX, panelY, panelW, panelH, 8, 0xD8FFFFFF, spotifyGreen);
+
+        ctx.drawString(this.font, "Connect Spotify", panelX + 18, panelY + 18, RenderUtils.TEXT_COLOR, true);
+        ctx.drawString(this.font, "Log in once in your browser. No setup needed.", panelX + 18, panelY + 38, RenderUtils.MUTED_COLOR, false);
+
+        boolean connecting = snapshot.connecting();
+        drawSpotifyPrimaryButton(ctx, mouseX, mouseY, panelX + 18, panelY + 66, panelW - 36, 32,
+            connecting ? "Finish login in browser" : "Connect with Spotify", spotifyGreen);
+        ctx.drawString(this.font, cropText(snapshot.status(), 48), panelX + 18, panelY + 112, RenderUtils.MUTED_COLOR, false);
+    }
+
+    private void drawSpotifyPrimaryButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h, String text, int color) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        RenderUtils.drawRoundedRect(ctx, x, y, w, h, h / 2, hover ? 0xFF35E778 : color);
+        ctx.drawString(this.font, text, x + (w - this.font.width(text)) / 2, y + 12, 0xFF07130B, true);
+    }
+
+    private void drawSpotifyViewButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h, String text, boolean active) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        int bg = active ? 0xF4FCFFFF : (hover ? 0xF0FAFFFF : 0xECF8FEFF);
+        RenderUtils.drawGlassPanel(ctx, x, y, w, h, 6, bg, 0xFF00D9FF);
+        ctx.drawString(this.font, text, x + (w - this.font.width(text)) / 2, y + 7, RenderUtils.TEXT_COLOR, false);
+    }
+
+    private void renderSpotifyHomeContent(GuiGraphics ctx, int mouseX, int mouseY, SpotifySnapshot snapshot, List<SpotifyDevice> filteredDevices, int x, int y, int w, int h) {
+        int artSize = 84;
+        RenderUtils.drawGlassPanel(ctx, x, y, artSize, artSize, 8, 0xF4FCFFFF, 0xFF00D9FF);
+        if (spotifyAlbumArtReady) {
+            int cell = Math.max(1, (artSize - 12) / 8);
+            int px = x + 6;
+            int py = y + 6;
+            int index = 0;
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int color = spotifyAlbumArtPixels[index++];
+                    ctx.fill(px + (col * cell), py + (row * cell), px + ((col + 1) * cell), py + ((row + 1) * cell), color);
+                }
+            }
+        } else {
+            ctx.drawString(this.font, "ART", x + artSize / 2 - 10, y + artSize / 2 - 4, RenderUtils.MUTED_COLOR, false);
+        }
+
+        int searchX = x + artSize + 10;
+        int searchW = Math.max(90, w - artSize - 10);
+        RenderUtils.drawGlassPanel(ctx, searchX, y, searchW, 22, 6, spotifyDeviceSearchFocused ? 0xF6FCFFFF : 0xECF8FEFF, 0xFF00D9FF);
+        String searchText = spotifyDeviceSearchQuery.isEmpty() ? "Search devices" : spotifyDeviceSearchQuery;
+        int searchColor = spotifyDeviceSearchQuery.isEmpty() ? RenderUtils.MUTED_COLOR : RenderUtils.TEXT_COLOR;
+        ctx.drawString(this.font, cropText(searchText, 18), searchX + 8, y + 7, searchColor, false);
+
+        ctx.drawString(this.font, "Devices: " + filteredDevices.size(), searchX + 2, y + 30, RenderUtils.MUTED_COLOR, false);
+        if (snapshot.activeDeviceId() != null && !snapshot.activeDeviceId().isBlank()) {
+            ctx.drawString(this.font, "Active playback device detected", searchX + 2, y + 42, RenderUtils.MUTED_COLOR, false);
+        }
+
+        int deviceListY = y + artSize + 8;
+        int deviceListH = Math.max(24, h - artSize - 14);
+        int rowH = 26;
+        int totalRows = filteredDevices.size();
+        int visibleRows = Math.max(1, deviceListH / rowH);
+        spotifyDeviceMaxScroll = Math.max(0, totalRows - visibleRows);
+        spotifyDeviceScroll = clamp(spotifyDeviceScroll, 0, spotifyDeviceMaxScroll);
+
+        if (filteredDevices.isEmpty()) {
+            ctx.drawString(this.font, "No available Spotify devices", x, deviceListY + 8, RenderUtils.MUTED_COLOR, false);
+            return;
+        }
+
+        int start = spotifyDeviceScroll;
+        int end = Math.min(totalRows, start + visibleRows);
+        int rowY = deviceListY;
+        for (int i = start; i < end; i++) {
+            SpotifyDevice device = filteredDevices.get(i);
+            boolean active = device.id().equals(snapshot.activeDeviceId()) || device.active();
+            boolean hover = inside(mouseX, mouseY, x, rowY, w, 22);
+            int bg = active ? 0xF4FCFFFF : (hover ? 0xF0FAFFFF : 0xECF8FEFF);
+            RenderUtils.drawGlassPanel(ctx, x, rowY, w, 22, 6, bg, 0xFF00D9FF);
+
+            String label = cropText(device.name() + " (" + device.type() + ")", 24);
+            ctx.drawString(this.font, label, x + 8, rowY + 7, RenderUtils.TEXT_COLOR, false);
+            ctx.drawString(this.font, Math.max(0, device.volumePercent()) + "%", x + w - 38, rowY + 7, RenderUtils.MUTED_COLOR, false);
+            if (active) {
+                ctx.drawString(this.font, "ACTIVE", x + w - 86, rowY + 7, 0xFF00A8D0, false);
+            }
+            rowY += rowH;
+        }
+    }
+
+    private void renderSpotifySearchContent(GuiGraphics ctx, int mouseX, int mouseY, SpotifyService service, int x, int y, int w, int h) {
+        RenderUtils.drawGlassPanel(ctx, x, y, w - 74, 22, 6, spotifySearchFocused ? 0xF6FCFFFF : 0xECF8FEFF, 0xFF00D9FF);
+        String searchText = spotifySearchInput.isEmpty() ? "Search songs, artists, albums" : spotifySearchInput;
+        int searchColor = spotifySearchInput.isEmpty() ? RenderUtils.MUTED_COLOR : RenderUtils.TEXT_COLOR;
+        ctx.drawString(this.font, cropText(searchText, 34), x + 8, y + 7, searchColor, false);
+
+        drawSpotifyControlButton(ctx, mouseX, mouseY, x + w - 68, y, 68, 22, "Search");
+        ctx.drawString(this.font, "Query: " + cropText(service.getLastSearchQuery(), 30), x, y + 30, RenderUtils.MUTED_COLOR, false);
+
+        List<SpotifySearchTrack> results = service.getSearchResults();
+        int listY = y + 46;
+        int rowH = 28;
+        int visibleRows = Math.max(1, (h - 52) / rowH);
+        spotifySearchMaxScroll = Math.max(0, results.size() - visibleRows);
+        spotifySearchScroll = clamp(spotifySearchScroll, 0, spotifySearchMaxScroll);
+
+        if (results.isEmpty()) {
+            ctx.drawString(this.font, "No search results yet", x, listY + 8, RenderUtils.MUTED_COLOR, false);
+            return;
+        }
+
+        int start = spotifySearchScroll;
+        int end = Math.min(results.size(), start + visibleRows);
+        int rowY = listY;
+        for (int i = start; i < end; i++) {
+            SpotifySearchTrack track = results.get(i);
+            boolean hover = inside(mouseX, mouseY, x, rowY, w, 24);
+            RenderUtils.drawGlassPanel(ctx, x, rowY, w, 24, 6, hover ? 0xF0FAFFFF : 0xECF8FEFF, 0xFF00D9FF);
+            ctx.drawString(this.font, cropText(track.title(), 26), x + 8, rowY + 6, RenderUtils.TEXT_COLOR, false);
+            ctx.drawString(this.font, cropText(track.artists(), 18), x + 152, rowY + 6, RenderUtils.MUTED_COLOR, false);
+            ctx.drawString(this.font, formatSpotifyTime(track.durationMs()), x + w - 90, rowY + 6, RenderUtils.MUTED_COLOR, false);
+            ctx.drawString(this.font, "PLAY", x + w - 34, rowY + 6, 0xFF00A8D0, false);
+            rowY += rowH;
+        }
+    }
+
+    private void renderSpotifyLibraryContent(GuiGraphics ctx, int mouseX, int mouseY, SpotifyService service, int x, int y, int w, int h) {
+        drawSpotifyControlButton(ctx, mouseX, mouseY, x + w - 72, y, 72, 22, "Reload");
+        ctx.drawString(this.font, cropText(service.getPlaylistsStatus(), 40), x, y + 7, RenderUtils.MUTED_COLOR, false);
+
+        List<SpotifyPlaylist> items = service.getPlaylists();
+        int listY = y + 32;
+        int rowH = 28;
+        int visibleRows = Math.max(1, (h - 36) / rowH);
+        spotifyLibraryMaxScroll = Math.max(0, items.size() - visibleRows);
+        spotifyLibraryScroll = clamp(spotifyLibraryScroll, 0, spotifyLibraryMaxScroll);
+
+        if (items.isEmpty()) {
+            ctx.drawString(this.font, "No playlists loaded", x, listY + 8, RenderUtils.MUTED_COLOR, false);
+            return;
+        }
+
+        int start = spotifyLibraryScroll;
+        int end = Math.min(items.size(), start + visibleRows);
+        int rowY = listY;
+        for (int i = start; i < end; i++) {
+            SpotifyPlaylist playlist = items.get(i);
+            boolean hover = inside(mouseX, mouseY, x, rowY, w, 24);
+            RenderUtils.drawGlassPanel(ctx, x, rowY, w, 24, 6, hover ? 0xF0FAFFFF : 0xECF8FEFF, 0xFF00D9FF);
+            ctx.drawString(this.font, cropText(playlist.name(), 24), x + 8, rowY + 6, RenderUtils.TEXT_COLOR, false);
+            ctx.drawString(this.font, cropText(playlist.owner(), 16), x + 150, rowY + 6, RenderUtils.MUTED_COLOR, false);
+            ctx.drawString(this.font, playlist.tracksCount() + " tracks", x + w - 98, rowY + 6, RenderUtils.MUTED_COLOR, false);
+            ctx.drawString(this.font, "PLAY", x + w - 34, rowY + 6, 0xFF00A8D0, false);
+            rowY += rowH;
+        }
+    }
+
+    private void drawSpotifyControlButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h, String text) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        RenderUtils.drawGlassPanel(ctx, x, y, w, h, 6, hover ? 0xF4FCFFFF : 0xECF8FEFF, 0xFF00D9FF);
+        ctx.drawString(this.font, text, x + (w - this.font.width(text)) / 2, y + 7, RenderUtils.TEXT_COLOR, false);
+    }
+
+    private void drawSpotifyDangerButton(GuiGraphics ctx, int mouseX, int mouseY, int x, int y, int w, int h, String text) {
+        boolean hover = inside(mouseX, mouseY, x, y, w, h);
+        RenderUtils.drawGlassPanel(ctx, x, y, w, h, 6, hover ? 0xFFFBEFEF : 0xFFF8EAEA, 0xFFD87474);
+        ctx.drawString(this.font, text, x + (w - this.font.width(text)) / 2, y + 7, 0xFF8A1E1E, false);
+    }
+
+    private void handleSpotifyClick(int mx, int my) {
+        int x = SPOTIFY_APP_X;
+        int y = SPOTIFY_APP_Y;
+        int appW = WIN_W - SIDEBAR_W - 80;
+        int appH = WIN_H - 74;
+        int gap = 12;
+        int leftW = SPOTIFY_LEFT_W;
+        int rightX = x + leftW + gap;
+        int rightW = appW - leftW - gap;
+
+        SpotifyService service = ClientClient.getSpotifyService();
+        SpotifySnapshot snapshot = service.getSnapshot();
+
+        if (!snapshot.authenticated()) {
+            int panelW = 360;
+            int panelH = 144;
+            int panelX = x + (appW - panelW) / 2;
+            int panelY = y + (appH - panelH) / 2;
+
+            if (inside(mx, my, panelX + 18, panelY + 66, panelW - 36, 32)) {
+                service.beginLogin();
+                return;
+            }
+
+            return;
+        }
+
+        int hudX = x + appW - 164;
+        if (inside(mx, my, hudX, y + 7, 76, 22)) {
+            boolean next = !ClientClient.getInstance().isSpotifyHudEnabled();
+            ClientClient.getInstance().setSpotifyHudEnabled(next);
+            for (HudModule module : ClientClient.getHudManager().getModules()) {
+                if ("Spotify Now Playing".equals(module.getName())) {
+                    module.setEnabled(next);
+                    break;
+                }
+            }
+            ClientClient.getHudManager().saveConfig();
+            return;
+        }
+        if (inside(mx, my, x + appW - 82, y + 7, 70, 22)) {
+            service.logout();
+            spotifyView = SpotifyView.HOME;
+            return;
+        }
+
+        int sectionY = y + 38;
+        int leftX = x + 12;
+        int statusY = sectionY;
+        int statusH = 232;
+        int volLabelY = statusY + statusH + 12;
+        int volX = leftX + 42;
+        int volW = leftW - 96;
+        if (inside(mx, my, volX, volLabelY + 2, volW, 12)) {
+            spotifyClientIdFocused = false;
+            spotifyRefreshFocused = false;
+            spotifyDeviceSearchFocused = false;
+            spotifyVolumeDragging = true;
+            applySpotifyVolumeFromMouse(mx, volX, volW);
+            return;
+        }
+
+        int controlsY = volLabelY + 24;
+        if (inside(mx, my, leftX + 54, controlsY, 46, 34)) {
+            service.previousTrack();
+            return;
+        }
+        if (inside(mx, my, leftX + 108, controlsY - 4, 60, 42)) {
+            service.togglePlayPause();
+            return;
+        }
+        if (inside(mx, my, leftX + 176, controlsY, 46, 34)) {
+            service.nextTrack();
+            return;
+        }
+
+        int rightPanelX = rightX;
+        int rightPanelY = sectionY;
+        int rightPanelW = rightW - 12;
+        int rightPanelH = appH - 40;
+        int navY = rightPanelY + 24;
+
+        if (inside(mx, my, rightPanelX + 10, navY, 82, 22)) {
+            spotifyView = SpotifyView.HOME;
+            spotifySearchFocused = false;
+            return;
+        }
+        if (inside(mx, my, rightPanelX + 98, navY, 82, 22)) {
+            spotifyView = SpotifyView.SEARCH;
+            spotifyDeviceSearchFocused = false;
+            return;
+        }
+        if (inside(mx, my, rightPanelX + 186, navY, 82, 22)) {
+            spotifyView = SpotifyView.LIBRARY;
+            spotifyDeviceSearchFocused = false;
+            spotifySearchFocused = false;
+            service.loadUserPlaylists();
+            return;
+        }
+
+        int contentX = rightPanelX + 10;
+        int contentY = navY + 30;
+        int contentW = rightPanelW - 20;
+        int contentH = rightPanelH - 40 - 22;
+
+        if (spotifyView == SpotifyView.HOME) {
+            int artSize = 84;
+            int searchX = contentX + artSize + 10;
+            int searchW = Math.max(90, contentW - artSize - 10);
+            if (inside(mx, my, searchX, contentY, searchW, 22)) {
+                spotifyDeviceSearchFocused = true;
+                spotifySearchFocused = false;
+                return;
+            }
+
+            List<SpotifyDevice> filteredDevices = getFilteredSpotifyDevices(service.getSnapshot());
+            int deviceListY = contentY + artSize + 8;
+            int deviceListH = Math.max(24, contentH - artSize - 14);
+            int rowH = 26;
+            int visibleRows = Math.max(1, deviceListH / rowH);
+            int start = spotifyDeviceScroll;
+            int end = Math.min(filteredDevices.size(), start + visibleRows);
+            int rowY = deviceListY;
+            for (int i = start; i < end; i++) {
+                SpotifyDevice device = filteredDevices.get(i);
+                if (inside(mx, my, contentX, rowY, contentW, 22)) {
+                    service.transferPlayback(device.id());
+                    return;
+                }
+                rowY += rowH;
+            }
+        } else if (spotifyView == SpotifyView.SEARCH) {
+            if (inside(mx, my, contentX, contentY, contentW - 74, 22)) {
+                spotifySearchFocused = true;
+                spotifyDeviceSearchFocused = false;
+                return;
+            }
+            if (inside(mx, my, contentX + contentW - 68, contentY, 68, 22)) {
+                spotifySearchFocused = false;
+                service.searchTracks(spotifySearchInput);
+                return;
+            }
+
+            List<SpotifySearchTrack> results = service.getSearchResults();
+            int listY = contentY + 46;
+            int rowH = 28;
+            int visibleRows = Math.max(1, (contentH - 52) / rowH);
+            int start = spotifySearchScroll;
+            int end = Math.min(results.size(), start + visibleRows);
+            int rowY = listY;
+            for (int i = start; i < end; i++) {
+                SpotifySearchTrack result = results.get(i);
+                if (inside(mx, my, contentX, rowY, contentW, 24)) {
+                    service.playTrack(result.uri());
+                    return;
+                }
+                rowY += rowH;
+            }
+        } else {
+            if (inside(mx, my, contentX + contentW - 72, contentY, 72, 22)) {
+                service.loadUserPlaylists();
+                return;
+            }
+
+            List<SpotifyPlaylist> items = service.getPlaylists();
+            int listY = contentY + 32;
+            int rowH = 28;
+            int visibleRows = Math.max(1, (contentH - 36) / rowH);
+            int start = spotifyLibraryScroll;
+            int end = Math.min(items.size(), start + visibleRows);
+            int rowY = listY;
+            for (int i = start; i < end; i++) {
+                SpotifyPlaylist playlist = items.get(i);
+                if (inside(mx, my, contentX, rowY, contentW, 24)) {
+                    service.playPlaylist(playlist.uri());
+                    return;
+                }
+                rowY += rowH;
+            }
+        }
+
+        spotifyClientIdFocused = false;
+        spotifyRefreshFocused = false;
+        spotifyDeviceSearchFocused = false;
+        spotifySearchFocused = false;
+        spotifyVolumeDragging = false;
+    }
+
+    private void adjustSpotifyVolume(int delta) {
+        SpotifySnapshot snapshot = ClientClient.getSpotifyService().getSnapshot();
+        int current = getActiveSpotifyVolume(snapshot);
+        ClientClient.getSpotifyService().setVolume(Math.max(0, Math.min(100, current + delta)));
+    }
+
+    private int getActiveSpotifyVolume(SpotifySnapshot snapshot) {
+        if (snapshot == null) {
+            return spotifyLiveVolume;
+        }
+        int fallback = spotifyLiveVolume;
+        String activeId = snapshot.activeDeviceId();
+        for (SpotifyDevice device : snapshot.devices()) {
+            if ((activeId != null && activeId.equals(device.id())) || device.active()) {
+                return Math.max(0, Math.min(100, device.volumePercent()));
+            }
+            fallback = Math.max(0, Math.min(100, device.volumePercent()));
+        }
+        return fallback;
+    }
+
+    private void applySpotifyVolumeFromMouse(int localMouseX, int sliderX, int sliderW) {
+        float pct = Math.max(0.0f, Math.min(1.0f, (localMouseX - sliderX) / (float) sliderW));
+        int vol = Math.max(0, Math.min(100, Math.round(pct * 100.0f)));
+        spotifyLiveVolume = vol;
+        ClientClient.getSpotifyService().setVolume(vol);
+    }
+
+    private void applySpotifyRefreshInterval() {
+        int value;
+        try {
+            value = Integer.parseInt(spotifyRefreshInput);
+        } catch (NumberFormatException ignored) {
+            value = 1000;
+        }
+        value = Math.max(750, Math.min(5000, value));
+        spotifyRefreshInput = Integer.toString(value);
+        ClientClient.getInstance().setSpotifyRefreshIntervalMs(value);
+        ClientClient.getSpotifyService().setRefreshIntervalMs(value);
+        ClientClient.getHudManager().saveConfig();
+    }
+
+    private String cropText(String text, int maxChars) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, Math.max(0, maxChars - 3)) + "...";
+    }
+
+    private String formatSpotifyTime(int millis) {
+        int totalSeconds = Math.max(0, millis / 1000);
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+    }
+
+    private List<SpotifyDevice> getFilteredSpotifyDevices(SpotifySnapshot snapshot) {
+        String query = spotifyDeviceSearchQuery.toLowerCase(Locale.ROOT).trim();
+        if (query.isEmpty()) {
+            return snapshot.devices();
+        }
+
+        List<SpotifyDevice> out = new ArrayList<>();
+        for (SpotifyDevice device : snapshot.devices()) {
+            String name = device.name() == null ? "" : device.name().toLowerCase(Locale.ROOT);
+            String type = device.type() == null ? "" : device.type().toLowerCase(Locale.ROOT);
+            if (name.contains(query) || type.contains(query)) {
+                out.add(device);
+            }
+        }
+        return out;
+    }
+
+    private void updateSpotifyAlbumArtThumbnail(SpotifyTrack track) {
+        String artUrl = (track == null || track.albumArtUrl() == null) ? "" : track.albumArtUrl();
+        if (artUrl.isBlank()) {
+            spotifyAlbumArtReady = false;
+            spotifyAlbumArtKey = "";
+            return;
+        }
+
+        if (artUrl.equals(spotifyAlbumArtKey) && spotifyAlbumArtReady) {
+            return;
+        }
+
+        byte[] bytes = ClientClient.getSpotifyService().getAlbumArtBytes(artUrl);
+        if (bytes == null || bytes.length == 0) {
+            if (!artUrl.equals(spotifyAlbumArtKey)) {
+                spotifyAlbumArtReady = false;
+                spotifyAlbumArtKey = artUrl;
+            }
+            return;
+        }
+
+        try {
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (image == null) {
+                return;
+            }
+
+            int width = Math.max(1, image.getWidth());
+            int height = Math.max(1, image.getHeight());
+            int idx = 0;
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int px = Math.min(width - 1, (int) ((col / 7.0f) * (width - 1)));
+                    int py = Math.min(height - 1, (int) ((row / 7.0f) * (height - 1)));
+                    int rgb = image.getRGB(px, py);
+                    spotifyAlbumArtPixels[idx++] = 0xFF000000 | (rgb & 0x00FFFFFF);
+                }
+            }
+            spotifyAlbumArtReady = true;
+            spotifyAlbumArtKey = artUrl;
+        } catch (Exception ignored) {
+        }
+    }
+
     private void renderAbout(GuiGraphics ctx, int drawX, int drawY, XenonTheme theme) {
         int x = drawX + 68;
         int y = drawY + 70;
@@ -689,15 +1413,15 @@ public class XenonMenuScreen extends Screen {
         ctx.drawString(this.font, text, x, y, RenderUtils.MUTED_COLOR, false);
     }
 
-    private void renderColorSlider(GuiGraphics ctx, String label, int x, int y, int value, int slider, int drawX, int accentColor) {
-        ctx.drawString(this.font, label + ": " + value, x, y, 0xFFFFFFFF, false);
-        int sliderX = drawX + 80;
+    private void renderColorSlider(GuiGraphics ctx, String label, int x, int y, int value, int slider, int accentColor) {
+        ctx.drawString(this.font, label + ": " + value, x, y, RenderUtils.TEXT_COLOR, false);
+        int sliderX = x + 38;
         int sliderW = 220;
-        RenderUtils.drawRoundedRect(ctx, sliderX, y + 4, sliderW, 10, 0, 0xFF222222);
+        RenderUtils.drawRoundedRect(ctx, sliderX, y + 3, sliderW, 10, 5, 0xA8080B10);
         int fillW = (int) ((value / 255.0f) * sliderW);
-        RenderUtils.drawRoundedRect(ctx, sliderX, y + 4, fillW, 10, 0, accentColor);
+        RenderUtils.drawRoundedRect(ctx, sliderX, y + 3, fillW, 10, 5, accentColor);
         int handleX = Math.max(sliderX, sliderX + fillW - 2);
-        RenderUtils.drawRoundedRect(ctx, handleX, y + 2, 4, 14, 0, 0xFFFFFFFF);
+        RenderUtils.drawRoundedRect(ctx, handleX, y, 5, 16, 2, 0xFFFFFFFF);
 
         if (draggingSlider == slider) {
             ctx.drawString(this.font, "*", sliderX + sliderW + 8, y, accentColor, false);
@@ -730,26 +1454,43 @@ public class XenonMenuScreen extends Screen {
                     ctx.fill(px, py, px + 1, py + 1, color);
                 }
             }
+            case DRAWN -> {
+                int originX = centerX - CrosshairCustomizer.CUSTOM_GRID_SIZE / 2;
+                int originY = centerY - CrosshairCustomizer.CUSTOM_GRID_SIZE / 2;
+                for (int row = 0; row < CrosshairCustomizer.CUSTOM_GRID_SIZE; row++) {
+                    for (int column = 0; column < CrosshairCustomizer.CUSTOM_GRID_SIZE; column++) {
+                        if (CrosshairCustomizer.isCustomPixelSet(column, row)) {
+                            ctx.fill(originX + column, originY + row, originX + column + 1, originY + row + 1, color);
+                        }
+                    }
+                }
+            }
         }
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        int absX = (int) event.x();
-        int absY = (int) event.y();
-
-        if (event.button() != 0) {
-            return super.mouseClicked(event, doubleClick);
-        }
+        int screenX = (int) event.x();
+        int screenY = (int) event.y();
 
         if (currentTab == Tab.POSITIONS) {
-            return positionsPanel.mouseClicked(absX, absY, event.button());
+            if (event.button() != 0) {
+                return super.mouseClicked(event, doubleClick);
+            }
+            return positionsPanel.mouseClicked(screenX, screenY, event.button());
         }
+
+        int absX = toLogical(screenX);
+        int absY = toLogical(screenY);
 
         if (!inside(absX, absY, winX, winY, WIN_W, WIN_H)) {
             searchFocused = false;
             return true;
         }
+
+        clickAnimX = absX;
+        clickAnimY = absY;
+        clickAnimStartedAt = System.currentTimeMillis();
 
         if (wizardVisible) {
             return handleFirstRunWizardClick(absX, absY);
@@ -757,6 +1498,13 @@ public class XenonMenuScreen extends Screen {
 
         int mx = absX - winX;
         int my = absY - winY;
+
+        if (event.button() != 0) {
+            if (currentTab == Tab.SETTINGS && event.button() == 1) {
+                return settingsPanel.mouseClicked(mx, my, event.button());
+            }
+            return super.mouseClicked(event, doubleClick);
+        }
 
         int closeX = 12;
         int closeY = 8;
@@ -773,26 +1521,30 @@ public class XenonMenuScreen extends Screen {
             if (inside(mx, my, boxX, 122, boxW, boxH)) { currentTab = Tab.SETTINGS; return true; }
             if (inside(mx, my, boxX, 176, boxW, boxH)) { currentTab = Tab.POSITIONS; return true; }
             if (inside(mx, my, boxX, 230, boxW, boxH)) { currentTab = Tab.CHAT; return true; }
-            if (inside(mx, my, boxX, 284, boxW, boxH)) { currentTab = Tab.PERFORMANCE; return true; }
-            if (inside(mx, my, boxX, 338, boxW, boxH)) { currentTab = Tab.CONFIG; return true; }
-            if (inside(mx, my, boxX, 392, boxW, boxH)) { currentTab = Tab.ABOUT; return true; }
+            if (inside(mx, my, boxX, 284, boxW, boxH)) { currentTab = Tab.SPOTIFY; return true; }
+            if (inside(mx, my, boxX, 338, boxW, boxH)) { currentTab = Tab.PERFORMANCE; return true; }
+            if (inside(mx, my, boxX, 392, boxW, boxH)) { currentTab = Tab.CONFIG; return true; }
+            if (inside(mx, my, boxX, 446, boxW, boxH)) { currentTab = Tab.ABOUT; return true; }
             return true;
         }
 
         if (my < HEADER_H) {
-            int fx = SIDEBAR_W + 260;
+            int filterW = 56;
+            int filterH = 26;
+            int filterStep = 60;
+            int fx = SIDEBAR_W + 212;
             for (String f : FILTERS) {
-                if (inside(mx, my, fx, 10, 62, 30)) {
+                if (inside(mx, my, fx, 10, filterW, filterH)) {
                     currentFilter = f;
                     invalidateFilteredModules();
                     return true;
                 }
-                fx += 68;
+                fx += filterStep;
             }
 
-            int searchW = 160;
+            int searchW = 146;
             int searchX = WIN_W - searchW - 12;
-            if (inside(mx, my, searchX, 10, searchW, 30)) {
+            if (inside(mx, my, searchX, 10, searchW, 26)) {
                 searchFocused = true;
                 return true;
             }
@@ -818,6 +1570,10 @@ public class XenonMenuScreen extends Screen {
             return configPanel.mouseClicked(mx, my, event.button());
         }
 
+        if (currentTab == Tab.SPOTIFY) {
+            return spotifyPanel.mouseClicked(mx, my, event.button());
+        }
+
         if (currentTab == Tab.PERFORMANCE) {
             return true;
         }
@@ -825,67 +1581,91 @@ public class XenonMenuScreen extends Screen {
         return true;
     }
 
-    private void handleSettingsClick(int mx, int my) {
-        int x = 68;
-        int y = 60;
+    private void handleSettingsClick(int mx, int my, int button) {
+        if (applyCrosshairCanvasInput(mx, my, button == 0)) {
+            drawingCrosshair = true;
+            crosshairDrawValue = button == 0;
+            crosshairType = CrosshairCustomizer.CrosshairType.DRAWN;
+            customCrosshairEnabled = true;
+            applyCrosshairSettings();
+            return;
+        }
 
-        if (inside(mx, my, x, y + 20, 120, 20)) {
+        if (button != 0) {
+            return;
+        }
+
+        int x = 76;
+        int y = 62;
+
+        if (inside(mx, my, x, y + 18, 140, 24)) {
             customCrosshairEnabled = !customCrosshairEnabled;
             applyCrosshairSettings();
             return;
         }
 
-        int typeY = y + 54;
+        int typeY = y + 52;
         int typeX = x;
         for (CrosshairCustomizer.CrosshairType type : CrosshairCustomizer.CrosshairType.values()) {
-            if (inside(mx, my, typeX, typeY, 70, 20)) {
+            if (inside(mx, my, typeX, typeY, 78, 24)) {
                 crosshairType = type;
                 applyCrosshairSettings();
                 return;
             }
-            typeX += 76;
+            typeX += 84;
         }
 
-        int sliderX = 80;
-        if (inside(mx, my, sliderX, y + 90, 220, 10)) {
+        int sliderX = x + 38;
+        if (inside(mx, my, sliderX, y + 96, 220, 16)) {
             draggingSlider = 1;
-            crosshairRed = valueFromSlider(mx);
+            crosshairRed = valueFromSlider(mx, sliderX);
             applyCrosshairSettings();
             return;
         }
-        if (inside(mx, my, sliderX, y + 118, 220, 10)) {
+        if (inside(mx, my, sliderX, y + 128, 220, 16)) {
             draggingSlider = 2;
-            crosshairGreen = valueFromSlider(mx);
+            crosshairGreen = valueFromSlider(mx, sliderX);
             applyCrosshairSettings();
             return;
         }
-        if (inside(mx, my, sliderX, y + 146, 220, 10)) {
+        if (inside(mx, my, sliderX, y + 160, 220, 16)) {
             draggingSlider = 3;
-            crosshairBlue = valueFromSlider(mx);
+            crosshairBlue = valueFromSlider(mx, sliderX);
             applyCrosshairSettings();
             return;
         }
 
-        int buttonY = y + 201;
-        if (inside(mx, my, x, buttonY, 140, 24)) {
-            currentTab = Tab.CONFIG;
-            return;
-        }
-        if (inside(mx, my, x + 150, buttonY, 140, 24)) {
-            currentTab = Tab.ABOUT;
+        int gridSize = CrosshairCustomizer.CUSTOM_GRID_SIZE * CROSSHAIR_EDITOR_CELL;
+        if (inside(mx, my, CROSSHAIR_EDITOR_X, CROSSHAIR_EDITOR_Y + gridSize + 10, 64, 22)) {
+            CrosshairCustomizer.clearCustomPattern();
+            crosshairType = CrosshairCustomizer.CrosshairType.DRAWN;
+            applyCrosshairSettings();
+            ClientClient.getHudManager().saveConfig();
             return;
         }
 
-        int themeY = y + 252;
-        int bx = x + 45;
+        int themeY = 360;
+        int bx = x + 48;
         for (XenonTheme entry : XenonTheme.values()) {
-            if (inside(mx, my, bx, themeY - 4, 60, 18)) {
+            if (inside(mx, my, bx, themeY - 5, 68, 22)) {
                 ClientClient.getInstance().setThemeId(entry.name());
                 ClientClient.getHudManager().saveConfig();
                 return;
             }
-            bx += 66;
+            bx += 74;
         }
+    }
+
+    private boolean applyCrosshairCanvasInput(int mx, int my, boolean active) {
+        int gridSize = CrosshairCustomizer.CUSTOM_GRID_SIZE * CROSSHAIR_EDITOR_CELL;
+        if (!inside(mx, my, CROSSHAIR_EDITOR_X, CROSSHAIR_EDITOR_Y, gridSize, gridSize)) {
+            return false;
+        }
+
+        int column = (mx - CROSSHAIR_EDITOR_X) / CROSSHAIR_EDITOR_CELL;
+        int row = (my - CROSSHAIR_EDITOR_Y) / CROSSHAIR_EDITOR_CELL;
+        CrosshairCustomizer.setCustomPixel(column, row, active);
+        return true;
     }
 
     private void handleConfigClick(int mx, int my) {
@@ -960,18 +1740,22 @@ public class XenonMenuScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-        int absX = (int) event.x();
-        int absY = (int) event.y();
+        int screenX = (int) event.x();
+        int screenY = (int) event.y();
 
         if (draggingWindow) {
-            winX = clamp(absX - windowDragOffsetX, 0, Math.max(0, this.width - WIN_W));
-            winY = clamp(absY - windowDragOffsetY, 0, Math.max(0, this.height - WIN_H));
+            int absX = toLogical(screenX);
+            int absY = toLogical(screenY);
+            int logicalWidth = Math.round(this.width / uiScale);
+            int logicalHeight = Math.round(this.height / uiScale);
+            winX = clamp(absX - windowDragOffsetX, 0, Math.max(0, logicalWidth - WIN_W));
+            winY = clamp(absY - windowDragOffsetY, 0, Math.max(0, logicalHeight - WIN_H));
             return true;
         }
 
         if (draggingModule != null) {
-            int targetX = absX - moduleDragOffsetX;
-            int targetY = absY - moduleDragOffsetY;
+            int targetX = screenX - moduleDragOffsetX;
+            int targetY = screenY - moduleDragOffsetY;
             int snappedX = snapX(targetX, draggingModule);
             int snappedY = snapY(targetY, draggingModule);
             draggingModule.setX(snappedX);
@@ -980,7 +1764,8 @@ public class XenonMenuScreen extends Screen {
         }
 
         if (draggingSlider > 0) {
-            int sliderX = winX + 80;
+            int absX = toLogical(screenX);
+            int sliderX = winX + 114;
             int sliderW = 220;
             float pct = Math.max(0.0f, Math.min(1.0f, (((float) absX) - sliderX) / sliderW));
             int val = (int) (pct * 255.0f);
@@ -995,17 +1780,101 @@ public class XenonMenuScreen extends Screen {
             return true;
         }
 
+        if (drawingCrosshair) {
+            int mx = toLogical(screenX) - winX;
+            int my = toLogical(screenY) - winY;
+            applyCrosshairCanvasInput(mx, my, crosshairDrawValue);
+            return true;
+        }
+
+        if (currentTab == Tab.SPOTIFY && spotifyVolumeDragging) {
+            int absX = toLogical(screenX);
+            int mx = absX - winX;
+            int leftX = SPOTIFY_APP_X + 12;
+            int volX = leftX + 42;
+            int volW = SPOTIFY_LEFT_W - 96;
+            applySpotifyVolumeFromMouse(mx, volX, volW);
+            return true;
+        }
+
         return super.mouseDragged(event, dx, dy);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        int logicalMouseX = toLogical(mouseX);
+        int logicalMouseY = toLogical(mouseY);
+        boolean overResizeArea = inside(logicalMouseX, logicalMouseY, winX, winY, WIN_W, WIN_H)
+            && (logicalMouseX < winX + SIDEBAR_W || logicalMouseY < winY + HEADER_H);
+        if (currentTab != Tab.POSITIONS && overResizeArea && verticalAmount != 0.0) {
+            resizeMenu(verticalAmount);
+            return true;
+        }
+
+        if (currentTab == Tab.SPOTIFY) {
+            int absX = logicalMouseX;
+            int absY = logicalMouseY;
+
+            int appX = winX + SPOTIFY_APP_X;
+            int appW = WIN_W - SIDEBAR_W - 80;
+            int appH = WIN_H - 74;
+            int gap = 12;
+            int leftW = SPOTIFY_LEFT_W;
+            int rightX = appX + leftW + gap;
+            int rightW = appW - leftW - gap;
+            int sectionY = (winY + SPOTIFY_APP_Y) + 38;
+            int rightPanelX = rightX;
+            int rightPanelY = sectionY;
+            int rightPanelW = rightW - 12;
+            int rightPanelH = appH - 40;
+            int navY = rightPanelY + 24;
+            int contentX = rightPanelX + 10;
+            int contentY = navY + 30;
+            int contentW = rightPanelW - 20;
+            int contentH = rightPanelH - 40 - 22;
+
+            if (spotifyView == SpotifyView.HOME) {
+                int artSize = 84;
+                int listY = contentY + artSize + 8;
+                int listH = Math.max(24, contentH - artSize - 14);
+                if (inside(absX, absY, contentX, listY, contentW + 8, listH)) {
+                    if (spotifyDeviceMaxScroll <= 0) {
+                        return true;
+                    }
+                    spotifyDeviceScroll = clamp(spotifyDeviceScroll - (int) Math.signum(verticalAmount), 0, spotifyDeviceMaxScroll);
+                    return true;
+                }
+            } else if (spotifyView == SpotifyView.SEARCH) {
+                int listY = contentY + 46;
+                int listH = Math.max(24, contentH - 52);
+                if (inside(absX, absY, contentX, listY, contentW + 8, listH)) {
+                    if (spotifySearchMaxScroll <= 0) {
+                        return true;
+                    }
+                    spotifySearchScroll = clamp(spotifySearchScroll - (int) Math.signum(verticalAmount), 0, spotifySearchMaxScroll);
+                    return true;
+                }
+            } else {
+                int listY = contentY + 32;
+                int listH = Math.max(24, contentH - 36);
+                if (inside(absX, absY, contentX, listY, contentW + 8, listH)) {
+                    if (spotifyLibraryMaxScroll <= 0) {
+                        return true;
+                    }
+                    spotifyLibraryScroll = clamp(spotifyLibraryScroll - (int) Math.signum(verticalAmount), 0, spotifyLibraryMaxScroll);
+                    return true;
+                }
+            }
+
+            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        }
+
         if (currentTab != Tab.MODULES) {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
 
-        int absX = (int) mouseX;
-        int absY = (int) mouseY;
+        int absX = logicalMouseX;
+        int absY = logicalMouseY;
         if (!inside(absX, absY, winX + SIDEBAR_W, winY + HEADER_H, WIN_W - SIDEBAR_W, WIN_H - HEADER_H)) {
             return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
@@ -1044,6 +1913,17 @@ public class XenonMenuScreen extends Screen {
             handled = true;
         }
 
+        if (drawingCrosshair) {
+            drawingCrosshair = false;
+            ClientClient.getHudManager().saveConfig();
+            handled = true;
+        }
+
+        if (spotifyVolumeDragging) {
+            spotifyVolumeDragging = false;
+            handled = true;
+        }
+
         if (handled) {
             return true;
         }
@@ -1053,10 +1933,75 @@ public class XenonMenuScreen extends Screen {
     @Override
     public boolean keyPressed(KeyEvent keyEvent) {
         int key = keyEvent.key();
+        boolean ctrlDown = (keyEvent.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0;
 
-        if ((keyEvent.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0 && key == GLFW.GLFW_KEY_F) {
+        if (ctrlDown && key == GLFW.GLFW_KEY_F) {
             searchFocused = true;
             return true;
+        }
+
+        if (ctrlDown && key == GLFW.GLFW_KEY_V) {
+            String clip = Minecraft.getInstance().keyboardHandler.getClipboard();
+            if (clip == null) {
+                clip = "";
+            }
+            clip = clip.replace("\r", "").replace("\n", "");
+
+            if (spotifyClientIdFocused) {
+                spotifyClientIdInput = clip.length() > 128 ? clip.substring(0, 128) : clip;
+                return true;
+            }
+
+            if (spotifyRefreshFocused) {
+                StringBuilder digits = new StringBuilder();
+                for (int i = 0; i < clip.length(); i++) {
+                    char c = clip.charAt(i);
+                    if (Character.isDigit(c)) {
+                        digits.append(c);
+                    }
+                    if (digits.length() >= 5) {
+                        break;
+                    }
+                }
+                if (!digits.isEmpty()) {
+                    spotifyRefreshInput = digits.toString();
+                }
+                return true;
+            }
+
+            if (spotifyDeviceSearchFocused) {
+                spotifyDeviceSearchQuery = clip.length() > 24 ? clip.substring(0, 24) : clip;
+                spotifyDeviceScroll = 0;
+                return true;
+            }
+
+            if (spotifySearchFocused) {
+                spotifySearchInput = clip.length() > 64 ? clip.substring(0, 64) : clip;
+                return true;
+            }
+
+            if (searchFocused) {
+                searchQuery = clip.length() > 64 ? clip.substring(0, 64) : clip;
+                invalidateFilteredModules();
+                return true;
+            }
+
+            if (presetNameFocused) {
+                StringBuilder name = new StringBuilder();
+                for (int i = 0; i < clip.length(); i++) {
+                    char c = clip.charAt(i);
+                    if (Character.isLetterOrDigit(c) || c == '-' || c == '_') {
+                        name.append(c);
+                    }
+                    if (name.length() >= 16) {
+                        break;
+                    }
+                }
+                if (!name.isEmpty()) {
+                    presetName = name.toString();
+                }
+                return true;
+            }
         }
 
         if (awaitingKeybindModule != null) {
@@ -1080,6 +2025,60 @@ public class XenonMenuScreen extends Screen {
             return true;
         }
 
+        if (spotifyClientIdFocused && key == 259) {
+            if (!spotifyClientIdInput.isEmpty()) {
+                spotifyClientIdInput = spotifyClientIdInput.substring(0, spotifyClientIdInput.length() - 1);
+            }
+            return true;
+        }
+
+        if (spotifyRefreshFocused && key == 259) {
+            if (!spotifyRefreshInput.isEmpty()) {
+                spotifyRefreshInput = spotifyRefreshInput.substring(0, spotifyRefreshInput.length() - 1);
+            }
+            return true;
+        }
+
+        if (spotifyDeviceSearchFocused && key == 259) {
+            if (!spotifyDeviceSearchQuery.isEmpty()) {
+                spotifyDeviceSearchQuery = spotifyDeviceSearchQuery.substring(0, spotifyDeviceSearchQuery.length() - 1);
+                spotifyDeviceScroll = 0;
+            }
+            return true;
+        }
+
+        if (spotifySearchFocused && key == 259) {
+            if (!spotifySearchInput.isEmpty()) {
+                spotifySearchInput = spotifySearchInput.substring(0, spotifySearchInput.length() - 1);
+            }
+            return true;
+        }
+
+        if (spotifyRefreshFocused && key == 257) {
+            applySpotifyRefreshInterval();
+            spotifyRefreshFocused = false;
+            return true;
+        }
+
+        if (spotifyClientIdFocused && key == 257) {
+            ClientClient.getInstance().setSpotifyClientId(spotifyClientIdInput);
+            ClientClient.getSpotifyService().setClientId(spotifyClientIdInput);
+            ClientClient.getHudManager().saveConfig();
+            spotifyClientIdFocused = false;
+            return true;
+        }
+
+        if (spotifyDeviceSearchFocused && key == 257) {
+            spotifyDeviceSearchFocused = false;
+            return true;
+        }
+
+        if (spotifySearchFocused && key == 257) {
+            ClientClient.getSpotifyService().searchTracks(spotifySearchInput);
+            spotifySearchFocused = false;
+            return true;
+        }
+
         if (presetNameFocused && key == 259) {
             if (!presetName.isEmpty()) {
                 presetName = presetName.substring(0, presetName.length() - 1);
@@ -1099,6 +2098,34 @@ public class XenonMenuScreen extends Screen {
                 return true;
             }
             searchFocused = false;
+            return true;
+        }
+
+        if (spotifyClientIdFocused && key == 256) {
+            spotifyClientIdFocused = false;
+            return true;
+        }
+
+        if (spotifyRefreshFocused && key == 256) {
+            spotifyRefreshFocused = false;
+            return true;
+        }
+
+        if (spotifyDeviceSearchFocused && key == 256) {
+            if (!spotifyDeviceSearchQuery.isEmpty()) {
+                spotifyDeviceSearchQuery = "";
+                spotifyDeviceScroll = 0;
+            }
+            spotifyDeviceSearchFocused = false;
+            return true;
+        }
+
+        if (spotifySearchFocused && key == 256) {
+            if (!spotifySearchInput.isEmpty()) {
+                spotifySearchInput = "";
+                return true;
+            }
+            spotifySearchFocused = false;
             return true;
         }
 
@@ -1130,6 +2157,39 @@ public class XenonMenuScreen extends Screen {
             }
             return true;
         }
+
+        if (spotifyClientIdFocused) {
+            char c = (char) event.codepoint();
+            if (!Character.isISOControl(c) && spotifyClientIdInput.length() < 128) {
+                spotifyClientIdInput += c;
+            }
+            return true;
+        }
+
+        if (spotifyRefreshFocused) {
+            char c = (char) event.codepoint();
+            if (Character.isDigit(c) && spotifyRefreshInput.length() < 5) {
+                spotifyRefreshInput += c;
+            }
+            return true;
+        }
+
+        if (spotifyDeviceSearchFocused) {
+            char c = (char) event.codepoint();
+            if (!Character.isISOControl(c) && spotifyDeviceSearchQuery.length() < 24) {
+                spotifyDeviceSearchQuery += c;
+                spotifyDeviceScroll = 0;
+            }
+            return true;
+        }
+
+        if (spotifySearchFocused) {
+            char c = (char) event.codepoint();
+            if (!Character.isISOControl(c) && spotifySearchInput.length() < 64) {
+                spotifySearchInput += c;
+            }
+            return true;
+        }
         return super.charTyped(event);
     }
 
@@ -1141,6 +2201,10 @@ public class XenonMenuScreen extends Screen {
         state.setSearchQuery(searchQuery);
         state.setMenuX(winX);
         state.setMenuY(winY);
+        state.setSpotifyCompactView(spotifyCompactView);
+        state.setSpotifyClientId(spotifyClientIdInput);
+        ClientClient.getSpotifyService().setClientId(spotifyClientIdInput);
+        applySpotifyRefreshInterval();
         ClientClient.getHudManager().saveConfig();
     }
 
@@ -1239,6 +2303,11 @@ public class XenonMenuScreen extends Screen {
             case CHAT -> {
                 RenderUtils.drawRoundedRect(ctx, x + 3, y + 4, 10, 7, 3, fx);
                 ctx.fill(x + 6, y + 11, x + 8, y + 13, fx);
+            }
+            case SPOTIFY -> {
+                RenderUtils.drawRoundedRect(ctx, x + 3, y + 4, 10, 10, 5, fx);
+                ctx.fill(x + 6, y + 7, x + 10, y + 8, 0x44FFFFFF);
+                ctx.fill(x + 7, y + 9, x + 11, y + 10, 0x44FFFFFF);
             }
             case PERFORMANCE -> {
                 ctx.fill(x + 4, y + 10, x + 12, y + 12, fx);
@@ -1466,7 +2535,7 @@ public class XenonMenuScreen extends Screen {
     }
 
     private void drawEnhancedToggle(GuiGraphics ctx, int x, int y, boolean enabled, int accentColor) {
-        int bgColor = enabled ? 0xC043B581 : 0xC0303846;
+        int bgColor = enabled ? accentColor : 0xFFD0E8F5;
         RenderUtils.drawRoundedRect(ctx, x, y, 18, 18, 4, bgColor);
         
         int lightEdge = 0x26FFFFFF;
@@ -1476,7 +2545,7 @@ public class XenonMenuScreen extends Screen {
         int innerSize = 10;
         int innerX = x + (18 - innerSize) / 2;
         int innerY = y + (18 - innerSize) / 2;
-        int innerColor = enabled ? 0xFFFFFFFF : 0xFF5A6578;
+        int innerColor = enabled ? 0xFFFFFFFF : 0xFF7A9AB0;
         RenderUtils.drawRoundedRect(ctx, innerX, innerY, innerSize, innerSize, 2, innerColor);
     }
 
@@ -1495,8 +2564,7 @@ public class XenonMenuScreen extends Screen {
         client.setCrosshairColor((crosshairRed << 16) | (crosshairGreen << 8) | crosshairBlue);
     }
 
-    private int valueFromSlider(int localX) {
-        int sliderX = 80;
+    private int valueFromSlider(int localX, int sliderX) {
         int sliderW = 220;
         float pct = Math.max(0.0f, Math.min(1.0f, ((float) (localX - sliderX)) / sliderW));
         return (int) (pct * 255.0f);
@@ -1573,6 +2641,41 @@ public class XenonMenuScreen extends Screen {
     private static int applyAlpha(int color, float alpha) {
         int a = (int) (((color >>> 24) & 0xFF) * alpha);
         return (a << 24) | (color & 0x00FFFFFF);
+    }
+
+    private int toLogical(double coordinate) {
+        return (int) (coordinate / uiScale);
+    }
+
+    private void resizeMenu(double scrollAmount) {
+        float nextScale = uiScale + (float) Math.signum(scrollAmount) * UI_SCALE_STEP;
+        nextScale = Math.max(MIN_UI_SCALE, Math.min(MAX_UI_SCALE, nextScale));
+        if (Math.abs(nextScale - uiScale) < 0.001f) {
+            return;
+        }
+
+        float screenCenterX = (winX + WIN_W / 2.0f) * uiScale;
+        float screenCenterY = (winY + WIN_H / 2.0f) * uiScale;
+        uiScale = nextScale;
+
+        int logicalWidth = Math.round(this.width / uiScale);
+        int logicalHeight = Math.round(this.height / uiScale);
+        winX = clamp(Math.round(screenCenterX / uiScale - WIN_W / 2.0f), 0, Math.max(0, logicalWidth - WIN_W));
+        winY = clamp(Math.round(screenCenterY / uiScale - WIN_H / 2.0f), 0, Math.max(0, logicalHeight - WIN_H));
+    }
+
+    private void renderClickAnimation(GuiGraphics ctx, int accentColor) {
+        if (clickAnimStartedAt == 0L) {
+            return;
+        }
+
+        float progress = (System.currentTimeMillis() - clickAnimStartedAt) / (float) CLICK_ANIMATION_MS;
+        if (progress >= 1.0f) {
+            clickAnimStartedAt = 0L;
+            return;
+        }
+
+        RenderUtils.drawClickPulse(ctx, clickAnimX, clickAnimY, Math.max(0.0f, progress), accentColor);
     }
 
     private static int fadeAlpha(int color, float factor) {

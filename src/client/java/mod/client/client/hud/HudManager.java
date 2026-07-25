@@ -43,6 +43,8 @@ public class HudManager {
         modules.add(new CpsGraph());
         modules.add(new PingGraph());
         modules.add(new MinimapLiteRadar());
+        modules.add(new SpotifyNowPlayingModule());
+        modules.add(new MaceEnchantmentHud());
 
         registerTags();
         config.load(modules, ClientClient.getInstance());
@@ -157,6 +159,8 @@ public class HudManager {
         tag("Reach Display", "hud", "new", "pvp", "hypixel");
         tag("Item Counters", "hud", "new", "pvp", "hypixel");
         tag("Minimap Radar", "hud", "new");
+        tag("Spotify Now Playing", "hud", "new");
+        tag("Mace Enchantment", "hud", "new", "pvp");
     }
 
     private void tag(String moduleName, String... tags) {

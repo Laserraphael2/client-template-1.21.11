@@ -2,14 +2,14 @@
 	"schemaVersion": 1,
 	"id": "client",
 	"version": "${version}",
-	"name": "Client",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "Xenon Client",
+	"description": "Modern Minecraft HUD client with Arctic Glow glassmorphic UI. Features customizable modules, keybinds, and ultra-clean white design.",
 	"authors": [
-		"Me!"
+		"rapha"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/Laserraphael2/client-template-1.21.11",
+		"sources": "https://github.com/Laserraphael2/client-template-1.21.11"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/client/icon.png",
