@@ -35,6 +35,7 @@ dependencies {
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	modImplementation include("com.squareup.okhttp3:okhttp:4.12.0")
 	modImplementation include("com.squareup.okio:okio-jvm:3.9.0")
+	modImplementation include("org.jetbrains.kotlin:kotlin-stdlib:1.9.21")
 }
 
 processResources {
