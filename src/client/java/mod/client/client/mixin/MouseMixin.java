@@ -79,10 +79,10 @@ public class MouseMixin {
             return;
         }
 
-        boolean shiftDown = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS
-                || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS;
+        boolean controlDown = GLFW.glfwGetKey(window, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS
+            || GLFW.glfwGetKey(window, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
         Abilities abilities = client.player.getAbilities();
-        if (!shiftDown || !abilities.mayfly || !abilities.flying) {
+        if (!controlDown || !abilities.mayfly || !abilities.flying) {
             return;
         }
 

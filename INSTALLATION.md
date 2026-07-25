@@ -4,7 +4,7 @@
 
 ### 📦 JAR-Datei Location
 ```
-build\libs\client-1.0.3.jar
+build\libs\client-1.0.4.jar
 ```
 
 ---
@@ -24,7 +24,7 @@ build\libs\client-1.0.3.jar
    - Linux: `~/.minecraft/mods`
 
 ### Schritt 3: Xenon Client installieren
-1. Kopiere `build\libs\client-1.0.3.jar` in den `mods` Ordner
+1. Kopiere `build\libs\client-1.0.4.jar` in den `mods` Ordner
 2. Starte Minecraft mit dem **Fabric** Profil
 3. Drücke **RSHIFT** (Rechts Shift) im Spiel, um das Menü zu öffnen
 
@@ -86,8 +86,8 @@ Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** ankli
 | Aktion | Taste |
 |--------|-------|
 | Menü öffnen | **RSHIFT** (Rechts Shift) |
-| Creative-Flug beschleunigen | **Shift + Mausrad hoch** |
-| Creative-Flug verlangsamen | **Shift + Mausrad runter** |
+| Creative-Flug beschleunigen | **Ctrl + Mausrad hoch** |
+| Creative-Flug verlangsamen | **Ctrl + Mausrad runter** |
 | Modul an/aus | Toggle im Menü oder Keybind |
 | Keybind setzen | "Key" Button im Modul-Card |
 | Suche | Suchfeld oben rechts |
@@ -110,7 +110,7 @@ Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** ankli
 ---
 
 ## 📝 Version Info
-- **Mod Version:** 1.0.3
+- **Mod Version:** 1.0.4
 - **Minecraft:** 1.21.11
 - **Fabric Loader:** 0.19.3
 - **Fabric API:** 0.141.5+1.21.11
