@@ -1,15 +1,8 @@
 package mod.client;
 
-import mod.client.shield.ShieldPatternData;
-import mod.client.shield.ShieldPatternPayload;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.api.ModInitializer;
 
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,21 +17,6 @@ public class Client implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		PayloadTypeRegistry.playC2S().register(ShieldPatternPayload.TYPE, ShieldPatternPayload.CODEC);
-		ServerPlayNetworking.registerGlobalReceiver(ShieldPatternPayload.TYPE, (payload, context) -> {
-			if (!ShieldPatternData.isValidPattern(payload.pattern())) {
-				return;
-			}
-			context.server().execute(() -> {
-				InteractionHand hand = payload.offhand() ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
-				ItemStack stack = context.player().getItemInHand(hand);
-				if (stack.is(Items.SHIELD)) {
-					ShieldPatternData.write(stack, payload.pattern(), payload.color());
-					context.player().getInventory().setChanged();
-					context.player().containerMenu.broadcastChanges();
-				}
-			});
-		});
 		LOGGER.info("Hello Fabric world!");
 	}
 

@@ -191,6 +191,8 @@ public class ClientConfig {
         ui.addProperty("crosshairType", clientState.getCrosshairType().name());
         ui.addProperty("crosshairColor", clientState.getCrosshairColor());
         ui.addProperty("crosshairPattern", clientState.getCustomCrosshairPattern());
+        ui.addProperty("shieldPattern", clientState.getShieldPattern());
+        ui.addProperty("shieldColor", clientState.getShieldColor());
         root.add("ui", ui);
         return root;
     }
@@ -231,6 +233,8 @@ public class ClientConfig {
             if (ui.has("crosshairEnabled")) clientState.setCustomCrosshairEnabled(ui.get("crosshairEnabled").getAsBoolean());
             if (ui.has("crosshairColor")) clientState.setCrosshairColor(ui.get("crosshairColor").getAsInt());
             if (ui.has("crosshairPattern")) clientState.setCustomCrosshairPattern(ui.get("crosshairPattern").getAsString());
+            if (ui.has("shieldPattern")) clientState.setShieldPattern(ui.get("shieldPattern").getAsString());
+            if (ui.has("shieldColor")) clientState.setShieldColor(ui.get("shieldColor").getAsInt());
             if (ui.has("crosshairType")) {
                 try {
                     clientState.setCrosshairType(mod.client.client.render.CrosshairCustomizer.CrosshairType.valueOf(ui.get("crosshairType").getAsString()));

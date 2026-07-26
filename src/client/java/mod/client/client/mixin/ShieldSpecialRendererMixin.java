@@ -1,6 +1,7 @@
 package mod.client.client.mixin;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import mod.client.client.render.ShieldPatternCustomizer;
 import mod.client.shield.ShieldPatternData;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -17,7 +18,7 @@ public class ShieldSpecialRendererMixin {
     private void client$submitPattern(DataComponentMap components, PoseStack poseStack,
                                       SubmitNodeCollector collector, int light, int overlay,
                                       boolean foil, int outlineColor, CallbackInfo ci) {
-        ShieldPatternData.Pattern pattern = ShieldPatternData.read(components);
+        ShieldPatternData.Pattern pattern = ShieldPatternCustomizer.getDesign();
         if (pattern.isEmpty()) {
             return;
         }

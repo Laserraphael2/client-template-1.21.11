@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import mod.client.client.hud.HudManager;
 import mod.client.client.render.CrosshairCustomizer;
 import mod.client.client.render.MaceEnchantmentVisuals;
+import mod.client.client.render.ShieldPatternCustomizer;
 import mod.client.client.spotify.SpotifyService;
 import mod.client.client.state.UIState;
 
@@ -73,6 +74,22 @@ public class ClientClient implements ClientModInitializer {
     
     public void setCustomCrosshairEnabled(boolean enabled) {
         CrosshairCustomizer.setEnabled(enabled);
+    }
+
+    public String getShieldPattern() {
+        return ShieldPatternCustomizer.getPattern();
+    }
+
+    public void setShieldPattern(String pattern) {
+        ShieldPatternCustomizer.setPattern(pattern);
+    }
+
+    public int getShieldColor() {
+        return ShieldPatternCustomizer.getColor();
+    }
+
+    public void setShieldColor(int color) {
+        ShieldPatternCustomizer.setColor(color);
     }
 
     public String getCustomCrosshairPattern() {

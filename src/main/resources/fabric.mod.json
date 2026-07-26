@@ -13,11 +13,8 @@
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/client/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"mod.client.Client"
-		],
 		"client": [
 			"mod.client.client.ClientClient"
 		]

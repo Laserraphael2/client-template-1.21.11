@@ -21,8 +21,6 @@ import mod.client.client.screen.panels.SettingsPanel;
 import mod.client.client.screen.panels.SpotifyPanel;
 import mod.client.client.util.KeyNameUtils;
 import mod.client.shield.ShieldPatternData;
-import mod.client.shield.ShieldPatternPayload;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -177,6 +175,11 @@ public class XenonMenuScreen extends Screen {
         this.crosshairGreen = (color >> 8) & 0xFF;
         this.crosshairBlue = color & 0xFF;
         this.customCrosshairEnabled = client.isCustomCrosshairEnabled();
+        this.shieldPattern = client.getShieldPattern();
+        int shieldColor = client.getShieldColor();
+        this.shieldRed = (shieldColor >> 16) & 0xFF;
+        this.shieldGreen = (shieldColor >> 8) & 0xFF;
+        this.shieldBlue = shieldColor & 0xFF;
         this.spotifyClientIdInput = client.getSpotifyClientId();
         this.spotifyRefreshInput = Integer.toString(client.getSpotifyRefreshIntervalMs());
         this.spotifyCompactView = client.isSpotifyCompactView();
@@ -1488,9 +1491,9 @@ public class XenonMenuScreen extends Screen {
             }
         }
 
-        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 154, 164, 28, "Load held shield", theme.accent);
+        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 154, 164, 28, "Load saved design", theme.accent);
         drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 192, 164, 28, "Clear canvas", 0xFFD87474);
-        ctx.drawString(this.font, "Requires the mod on the server", controlsX + 124, controlsY + 232, RenderUtils.MUTED_COLOR, false);
+        ctx.drawString(this.font, "Client-side: visible only to you", controlsX + 124, controlsY + 232, RenderUtils.MUTED_COLOR, false);
         drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 252, 164, 34, "Apply to held shield", 0xFF35B86B);
     }
 
@@ -1773,17 +1776,13 @@ public class XenonMenuScreen extends Screen {
     }
 
     private void loadHeldShieldPattern() {
-        ItemStack shield = heldShield();
-        if (shield.isEmpty()) {
-            toast("Hold a shield in either hand");
-            return;
-        }
-        ShieldPatternData.Pattern pattern = ShieldPatternData.read(shield);
-        shieldPattern = pattern.pixels();
-        shieldRed = (pattern.color() >> 16) & 0xFF;
-        shieldGreen = (pattern.color() >> 8) & 0xFF;
-        shieldBlue = pattern.color() & 0xFF;
-        toast("Shield design loaded");
+        ClientClient client = ClientClient.getInstance();
+        shieldPattern = client.getShieldPattern();
+        int color = client.getShieldColor();
+        shieldRed = (color >> 16) & 0xFF;
+        shieldGreen = (color >> 8) & 0xFF;
+        shieldBlue = color & 0xFF;
+        toast("Saved local design loaded");
     }
 
     private void applyPatternToHeldShield() {
@@ -1793,13 +1792,11 @@ public class XenonMenuScreen extends Screen {
             toast("Hold a shield in either hand");
             return;
         }
-        if (!ClientPlayNetworking.canSend(ShieldPatternPayload.TYPE)) {
-            toast("Server needs Xenon Client 1.1.0+");
-            return;
-        }
-        boolean offhand = !client.player.getMainHandItem().is(Items.SHIELD);
-        ClientPlayNetworking.send(new ShieldPatternPayload(shieldPattern, shieldColor(), offhand));
-        toast("Shield design applied");
+        ClientClient state = ClientClient.getInstance();
+        state.setShieldPattern(shieldPattern);
+        state.setShieldColor(shieldColor());
+        ClientClient.getHudManager().saveConfig();
+        toast("Local shield design saved");
     }
 
     private void handleSettingsClick(int mx, int my, int button) {
