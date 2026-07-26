@@ -29,8 +29,6 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
 import javax.imageio.ImageIO;
@@ -1494,7 +1492,7 @@ public class XenonMenuScreen extends Screen {
         drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 154, 164, 28, "Load saved design", theme.accent);
         drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 192, 164, 28, "Clear canvas", 0xFFD87474);
         ctx.drawString(this.font, "Client-side: visible only to you", controlsX + 124, controlsY + 232, RenderUtils.MUTED_COLOR, false);
-        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 252, 164, 34, "Apply to held shield", 0xFF35B86B);
+        drawShieldEditorButton(ctx, mouseX, mouseY, controlsX + 124, controlsY + 252, 164, 34, "Save local design", 0xFF35B86B);
     }
 
     private void renderShieldColorSlider(GuiGraphics ctx, String label, int x, int y, int value, int slider, int color) {
@@ -1732,7 +1730,7 @@ public class XenonMenuScreen extends Screen {
         } else if (inside(mx, my, controlsX + 124, controlsY + 192, 164, 28)) {
             shieldPattern = ShieldPatternData.EMPTY_PATTERN;
         } else if (inside(mx, my, controlsX + 124, controlsY + 252, 164, 34)) {
-            applyPatternToHeldShield();
+            saveShieldDesign(true);
         }
     }
 
@@ -1743,6 +1741,10 @@ public class XenonMenuScreen extends Screen {
         }
         int column = (mx - SHIELD_EDITOR_X) / SHIELD_EDITOR_CELL;
         int row = (my - SHIELD_EDITOR_Y) / SHIELD_EDITOR_CELL;
+        if (column < 0 || column >= ShieldPatternData.GRID_SIZE
+                || row < 0 || row >= ShieldPatternData.GRID_SIZE) {
+            return false;
+        }
         int index = row * ShieldPatternData.GRID_SIZE + column;
         char[] pixels = shieldPattern.toCharArray();
         pixels[index] = active ? '1' : '0';
@@ -1761,20 +1763,6 @@ public class XenonMenuScreen extends Screen {
         }
     }
 
-    private ItemStack heldShield() {
-        Minecraft client = Minecraft.getInstance();
-        if (client.player == null) {
-            return ItemStack.EMPTY;
-        }
-        if (client.player.getMainHandItem().is(Items.SHIELD)) {
-            return client.player.getMainHandItem();
-        }
-        if (client.player.getOffhandItem().is(Items.SHIELD)) {
-            return client.player.getOffhandItem();
-        }
-        return ItemStack.EMPTY;
-    }
-
     private void loadHeldShieldPattern() {
         ClientClient client = ClientClient.getInstance();
         shieldPattern = client.getShieldPattern();
@@ -1785,18 +1773,20 @@ public class XenonMenuScreen extends Screen {
         toast("Saved local design loaded");
     }
 
-    private void applyPatternToHeldShield() {
-        Minecraft client = Minecraft.getInstance();
-        ItemStack shield = heldShield();
-        if (client.player == null || shield.isEmpty()) {
-            toast("Hold a shield in either hand");
-            return;
-        }
+    private void saveShieldDesign(boolean showToast) {
         ClientClient state = ClientClient.getInstance();
         state.setShieldPattern(shieldPattern);
         state.setShieldColor(shieldColor());
-        ClientClient.getHudManager().saveConfig();
-        toast("Local shield design saved");
+        boolean saved = ClientClient.getHudManager().saveConfig();
+        if (showToast) {
+            toast(saved ? "Local shield design saved" : "Failed to save shield design");
+        }
+    }
+
+    @Override
+    public void onClose() {
+        saveShieldDesign(false);
+        super.onClose();
     }
 
     private void handleSettingsClick(int mx, int my, int button) {

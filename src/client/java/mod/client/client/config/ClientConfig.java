@@ -49,7 +49,7 @@ public class ClientConfig {
         return new File(getPresetsDirectory(), safeName + ".json");
     }
 
-    public void save(List<HudModule> moduleList, ClientClient clientState) {
+    public boolean save(List<HudModule> moduleList, ClientClient clientState) {
         File configFile = getConfigFile();
         try {
             configFile.getParentFile().mkdirs();
@@ -64,8 +64,10 @@ public class ClientConfig {
                 GSON.toJson(root, writer);
             }
             LOGGER.info("Config saved: {}", configFile.getAbsolutePath());
+            return true;
         } catch (Exception e) {
             LOGGER.error("Failed to save config", e);
+            return false;
         }
     }
 

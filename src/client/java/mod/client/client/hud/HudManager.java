@@ -103,8 +103,8 @@ public class HudManager {
                 .findFirst();
     }
     
-    public void saveConfig() {
-        config.save(modules, ClientClient.getInstance());
+    public boolean saveConfig() {
+        return config.save(modules, ClientClient.getInstance());
     }
     
     public void resetPositions() {

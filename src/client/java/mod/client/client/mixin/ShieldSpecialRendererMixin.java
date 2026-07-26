@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.special.ShieldSpecialRenderer;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.world.item.ItemDisplayContext;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ShieldSpecialRenderer.class)
 public class ShieldSpecialRendererMixin {
     @Inject(method = "submit", at = @At("TAIL"))
-    private void client$submitPattern(DataComponentMap components, PoseStack poseStack,
+    private void client$submitPattern(DataComponentMap components, ItemDisplayContext displayContext, PoseStack poseStack,
                                       SubmitNodeCollector collector, int light, int overlay,
                                       boolean foil, int outlineColor, CallbackInfo ci) {
         ShieldPatternData.Pattern pattern = ShieldPatternCustomizer.getDesign();
