@@ -4,7 +4,7 @@
 
 ### 📦 JAR-Datei Location
 ```
-build\libs\client-1.1.2.jar
+build\libs\client-1.1.3.jar
 ```
 
 ---
@@ -24,7 +24,7 @@ build\libs\client-1.1.2.jar
    - Linux: `~/.minecraft/mods`
 
 ### Schritt 3: Xenon Client installieren
-1. Kopiere `build\libs\client-1.1.2.jar` in den `mods` Ordner
+1. Kopiere `build\libs\client-1.1.3.jar` in den `mods` Ordner
 2. Starte Minecraft mit dem **Fabric** Profil
 3. Drücke **RSHIFT** (Rechts Shift) im Spiel, um das Menü zu öffnen
 
@@ -119,7 +119,7 @@ Der Schildeditor funktioniert vollständig clientseitig. Auf dem Server ist kein
 ---
 
 ## 📝 Version Info
-- **Mod Version:** 1.1.2
+- **Mod Version:** 1.1.3
 - **Minecraft:** 1.21.11
 - **Fabric Loader:** 0.19.3
 - **Fabric API:** 0.141.5+1.21.11

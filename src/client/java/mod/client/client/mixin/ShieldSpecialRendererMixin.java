@@ -24,6 +24,8 @@ public class ShieldSpecialRendererMixin {
             return;
         }
 
+        poseStack.pushPose();
+        poseStack.scale(1.0F, -1.0F, -1.0F);
         collector.submitCustomGeometry(poseStack, RenderTypes.debugQuads(), (pose, vertices) -> {
             int red = (pattern.color() >> 16) & 0xFF;
             int green = (pattern.color() >> 8) & 0xFF;
@@ -51,5 +53,6 @@ public class ShieldSpecialRendererMixin {
                 }
             }
         });
+        poseStack.popPose();
     }
 }
