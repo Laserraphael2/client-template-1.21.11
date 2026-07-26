@@ -9,6 +9,7 @@
 		"ClientTickMixin",
 		"InGameHudMixin",
 		"GuiGraphicsMixin",
+		"ItemEntityRendererMixin",
 		"ShieldSpecialRendererMixin"
 	],
 	"injectors": {

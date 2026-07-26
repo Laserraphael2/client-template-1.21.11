@@ -1,9 +1,11 @@
 package mod.client.client.state;
 
+import mod.client.client.render.XenonTheme;
+
 public class UIState {
     private String currentFilter = "All";
     private String searchQuery = "";
-    private String themeId = "ICE";
+    private String themeId = "BLACK";
     private int menuX = -1;
     private int menuY = -1;
     private boolean wizardCompleted = false;
@@ -36,7 +38,7 @@ public class UIState {
     }
 
     public void setThemeId(String themeId) {
-        this.themeId = themeId;
+        this.themeId = XenonTheme.fromId(themeId).name();
     }
 
     public int getMenuX() {

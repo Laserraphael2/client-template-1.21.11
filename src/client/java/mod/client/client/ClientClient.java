@@ -121,7 +121,7 @@ public class ClientClient implements ClientModInitializer {
     }
 
     public void setThemeId(String themeId) {
-        uiState.setThemeId(themeId);
+        uiState.setThemeId(mod.client.client.render.XenonTheme.fromId(themeId).name());
     }
 
     public int getMenuX() {

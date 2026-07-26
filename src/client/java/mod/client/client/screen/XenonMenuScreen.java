@@ -99,6 +99,7 @@ public class XenonMenuScreen extends Screen {
     private boolean spotifySearchFocused;
 
     private HudModule awaitingKeybindModule;
+    private HudModule configuredModule;
 
     private String currentFilter = "All";
     private String searchQuery = "";
@@ -227,13 +228,14 @@ public class XenonMenuScreen extends Screen {
 
     private void renderWindow(GuiGraphics ctx, int mouseX, int mouseY) {
         XenonTheme theme = XenonTheme.fromId(ClientClient.getInstance().getThemeId());
+        RenderUtils.setTheme(theme);
 
         int drawX = winX;
         int drawY = winY + (int) ((1.0f - openAnim) * 10.0f);
 
-        int contentBg = 0xE8F4FCFF;
-        int sidebarBg = 0xDEEEFAFF;
-        int headerBg = 0xE0F0FBFF;
+        int contentBg = theme.contentBg;
+        int sidebarBg = theme.sidebarBg;
+        int headerBg = theme.sidebarBg;
 
         RenderUtils.drawGlassPanel(ctx, drawX, drawY, WIN_W, WIN_H, 8, applyAlpha(contentBg, openAnim), applyAlpha(theme.accent, openAnim));
         RenderUtils.drawGlassPanel(ctx, drawX, drawY, SIDEBAR_W, WIN_H, 8, applyAlpha(sidebarBg, openAnim), applyAlpha(theme.accent, openAnim));
@@ -252,6 +254,10 @@ public class XenonMenuScreen extends Screen {
             case PERFORMANCE -> performancePanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case CONFIG -> configPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
             case ABOUT -> aboutPanel.render(ctx, mouseX, mouseY, drawX, drawY, theme);
+        }
+
+        if (configuredModule != null) {
+            renderModuleConfig(ctx, drawX, drawY, theme);
         }
 
         renderClickAnimation(ctx, theme.accent);
@@ -362,6 +368,7 @@ public class XenonMenuScreen extends Screen {
             int iconY = cy + cardH - 29;
             
             if (inside(mx, my, icon1X, iconY, 16, 16)) {
+                configuredModule = mod;
                 return true;
             }
             
@@ -631,6 +638,65 @@ public class XenonMenuScreen extends Screen {
                 active ? entry.accent : RenderUtils.TEXT_COLOR, false);
             bx += 74;
         }
+    }
+
+    private void renderModuleConfig(GuiGraphics ctx, int drawX, int drawY, XenonTheme theme) {
+        int x = drawX + 220;
+        int y = drawY + 118;
+        int width = 320;
+        ctx.fill(drawX, drawY, drawX + WIN_W, drawY + WIN_H, 0x88000000);
+        RenderUtils.drawGlassPanel(ctx, x, y, width, 250, 8, theme.contentBg, theme.accent);
+        ctx.drawString(this.font, configuredModule.getName(), x + 18, y + 17, RenderUtils.TEXT_COLOR, true);
+        RenderUtils.drawSmallButton(ctx, x + width - 34, y + 10, 22, 22, 0xCCFFFFFF);
+        ctx.drawString(this.font, "X", x + width - 27, y + 17, RenderUtils.TEXT_COLOR, true);
+        RenderUtils.drawSeparator(ctx, x + 18, y + 44, width - 36, 0x40FFFFFF);
+
+        ctx.drawString(this.font, "Enabled", x + 18, y + 63, RenderUtils.TEXT_COLOR, false);
+        drawEnhancedToggle(ctx, x + width - 52, y + 58, configuredModule.isEnabled(), theme.accent);
+
+        ctx.drawString(this.font, "Scale", x + 18, y + 105, RenderUtils.TEXT_COLOR, false);
+        RenderUtils.drawSmallButton(ctx, x + 182, y + 96, 26, 22, 0xCCFFFFFF);
+        ctx.drawString(this.font, "-", x + 192, y + 103, RenderUtils.TEXT_COLOR, true);
+        String scaleText = formatScale(configuredModule.getScale());
+        ctx.drawString(this.font, scaleText, x + 218, y + 103, RenderUtils.TEXT_COLOR, false);
+        RenderUtils.drawSmallButton(ctx, x + 260, y + 96, 26, 22, 0xCCFFFFFF);
+        ctx.drawString(this.font, "+", x + 269, y + 103, RenderUtils.TEXT_COLOR, true);
+
+        ctx.drawString(this.font, "Keybind", x + 18, y + 147, RenderUtils.TEXT_COLOR, false);
+        RenderUtils.drawSmallButton(ctx, x + 182, y + 138, 104, 22, 0xCCFFFFFF);
+        String key = configuredModule.getKeybind() < 0 ? "None" : KeyNameUtils.format(configuredModule.getKeybind());
+        ctx.drawString(this.font, key, x + 234 - this.font.width(key) / 2, y + 145, RenderUtils.TEXT_COLOR, false);
+
+        ctx.drawString(this.font, "Position", x + 18, y + 189, RenderUtils.TEXT_COLOR, false);
+        RenderUtils.drawSmallButton(ctx, x + 182, y + 180, 104, 22, 0xCCFFFFFF);
+        ctx.drawString(this.font, "Reset", x + 220, y + 187, RenderUtils.TEXT_COLOR, false);
+        ctx.drawString(this.font, "Changes save immediately", x + 18, y + 226, RenderUtils.MUTED_COLOR, false);
+    }
+
+    private boolean handleModuleConfigClick(int mx, int my) {
+        int x = 220;
+        int y = 118;
+        if (inside(mx, my, x + 286, y + 10, 22, 22)) {
+            configuredModule = null;
+            return true;
+        }
+        if (inside(mx, my, x + 268, y + 58, 24, 20)) {
+            configuredModule.setEnabled(!configuredModule.isEnabled());
+        } else if (inside(mx, my, x + 182, y + 96, 26, 22)) {
+            configuredModule.setScale(configuredModule.getScale() - 0.25F);
+        } else if (inside(mx, my, x + 260, y + 96, 26, 22)) {
+            configuredModule.setScale(configuredModule.getScale() + 0.25F);
+        } else if (inside(mx, my, x + 182, y + 138, 104, 22)) {
+            awaitingKeybindModule = configuredModule;
+            toast("Press a key. ESC clears.");
+            return true;
+        } else if (inside(mx, my, x + 182, y + 180, 104, 22)) {
+            ClientClient.getHudManager().resetPosition(configuredModule);
+        } else {
+            return true;
+        }
+        ClientClient.getHudManager().saveConfig();
+        return true;
     }
 
     private void renderPositionOverlays(GuiGraphics ctx, int mouseX, int mouseY) {
@@ -1605,6 +1671,10 @@ public class XenonMenuScreen extends Screen {
 
         int mx = absX - winX;
         int my = absY - winY;
+
+        if (configuredModule != null) {
+            return event.button() == 0 ? handleModuleConfigClick(mx, my) : true;
+        }
 
         if (event.button() != 0) {
             if (currentTab == Tab.SETTINGS && event.button() == 1) {

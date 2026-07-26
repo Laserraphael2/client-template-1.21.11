@@ -15,11 +15,17 @@ public class RenderUtils {
     private static final int GLASS_DARK_BORDER = 0x18000000;
     private static final int MAX_CACHED_RADIUS = 32;
     private static final double[][] ROUNDED_INSETS = createRoundedInsetCache();
+    private static XenonTheme activeTheme = XenonTheme.BLACK;
+
+    public static void setTheme(XenonTheme theme) {
+        activeTheme = theme == null ? XenonTheme.BLACK : theme;
+    }
 
     public static void drawRoundedRect(GuiGraphics context, int x, int y, int width, int height, int radius, int color) {
         if (width <= 0 || height <= 0) {
             return;
         }
+        color = resolveThemeColor(color);
 
         int corner = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
         if (corner == 0) {
@@ -54,9 +60,13 @@ public class RenderUtils {
         if (width >= 80 && height >= 40) {
             drawRoundedRect(context, x + 1, y + 2, width, height, radius, 0x10000000);
         }
-        int glassAlpha = Math.max(0x48, Math.round(((baseColor >>> 24) & 0xFF) * 0.52f));
-        drawRoundedRect(context, x, y, width, height, radius, (glassAlpha << 24) | 0x00090B0F);
-        drawGlassBorder(context, x, y, width, height, radius, accentColor);
+        int glassAlpha = Math.max(0x48, Math.round(((baseColor >>> 24) & 0xFF) * 0.72f));
+        int baseRgb = baseColor & 0x00FFFFFF;
+        if (((baseRgb >> 16) & 0xFF) > 220 && ((baseRgb >> 8) & 0xFF) > 220 && (baseRgb & 0xFF) > 220) {
+            baseRgb = activeTheme.contentBg & 0x00FFFFFF;
+        }
+        drawRoundedRect(context, x, y, width, height, radius, (glassAlpha << 24) | baseRgb);
+        drawGlassBorder(context, x, y, width, height, radius, activeTheme.accent);
     }
 
     public static void drawGlassBorder(GuiGraphics context, int x, int y, int width, int height, int radius, int accentColor) {
@@ -90,18 +100,18 @@ public class RenderUtils {
         drawGlassPanel(context, x, y, width, height, 8, cardBg, accentColor);
         
         if (enabled) {
-            drawGreenGlow(context, x, y, width, height);
+            drawGreenGlow(context, x, y, width, height, accentColor);
         }
     }
 
-    public static void drawGreenGlow(GuiGraphics context, int x, int y, int width, int height) {
-        int glowColor = 0x3000D9FF;
+    public static void drawGreenGlow(GuiGraphics context, int x, int y, int width, int height, int accentColor) {
+        int glowColor = 0x30000000 | (accentColor & 0x00FFFFFF);
         context.fill(x - 1, y - 1, x + width + 1, y, glowColor);
         context.fill(x - 1, y + height, x + width + 1, y + height + 1, glowColor);
         context.fill(x - 1, y, x, y + height, glowColor);
         context.fill(x + width, y, x + width + 1, y + height, glowColor);
         
-        int innerGlow = 0x2000D9FF;
+        int innerGlow = 0x20000000 | (accentColor & 0x00FFFFFF);
         context.fill(x, y, x + width, y + 1, innerGlow);
         context.fill(x, y, x + 1, y + height, innerGlow);
     }
@@ -186,8 +196,16 @@ public class RenderUtils {
 
         int fillWidth = (int) (width * progress);
         if (fillWidth > 0) {
-            drawRoundedRect(context, x, y, fillWidth, height, 2, fillColor);
+            drawRoundedRect(context, x, y, fillWidth, height, 2, resolveThemeColor(fillColor));
         }
+    }
+
+    private static int resolveThemeColor(int color) {
+        int rgb = color & 0x00FFFFFF;
+        if (rgb == 0x0000D9FF || rgb == 0x0039D8FF || rgb == 0x0000E5FF || rgb == 0x0089B6FF) {
+            return (color & 0xFF000000) | (activeTheme.accent & 0x00FFFFFF);
+        }
+        return color;
     }
 
     public static void drawTextWithBackground(GuiGraphics context, Font font, String text, int x, int y, int textColor, int bgColor, int padding) {

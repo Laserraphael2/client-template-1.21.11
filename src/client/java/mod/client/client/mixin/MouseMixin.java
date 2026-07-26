@@ -4,13 +4,16 @@ import mod.client.client.ClientClient;
 import mod.client.client.modules.CPSCounter;
 import mod.client.client.modules.KeystrokeOverlay;
 import mod.client.client.modules.ComboCounter;
+import mod.client.client.modules.MaceHitDamage;
 import mod.client.client.util.SessionTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Abilities;
+import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -43,10 +46,10 @@ public class MouseMixin {
         // action == 1 means GLFW_PRESS
         if (action == 1 && ClientClient.getHudManager() != null) {
             int button = buttonInfo.button();
+            Minecraft client = Minecraft.getInstance();
 
             if (button == 0) {
                 SessionTracker.onLeftClick();
-                Minecraft client = Minecraft.getInstance();
                 Entity target = client.crosshairPickEntity;
                 if (target != null && client.player != null) {
                     float reach = (float) client.player.distanceTo(target);
@@ -67,6 +70,11 @@ public class MouseMixin {
                 }
                 if (module instanceof ComboCounter combo) {
                     if (button == 0) combo.onHit(); // Left click counts as hit
+                }
+                if (button == 0 && module instanceof MaceHitDamage maceDamage
+                    && client.screen == null && client.player != null && client.player.getMainHandItem().is(Items.MACE)
+                        && client.crosshairPickEntity instanceof LivingEntity target) {
+                    maceDamage.trackHit(target);
                 }
             });
         }

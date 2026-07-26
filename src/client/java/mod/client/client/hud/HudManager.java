@@ -45,6 +45,8 @@ public class HudManager {
         modules.add(new MinimapLiteRadar());
         modules.add(new SpotifyNowPlayingModule());
         modules.add(new MaceEnchantmentHud());
+        modules.add(new MaceHitDamage());
+        modules.add(new ItemBeam());
 
         registerTags();
         config.load(modules, ClientClient.getInstance());
@@ -111,6 +113,18 @@ public class HudManager {
         config.resetPositions(modules);
     }
 
+    public void resetPosition(HudModule target) {
+        int yOffset = 5;
+        for (HudModule module : modules) {
+            if (module == target) {
+                module.setX(5);
+                module.setY(yOffset);
+                return;
+            }
+            yOffset += module.getHeight() + 5;
+        }
+    }
+
     public boolean hasTag(HudModule module, String tag) {
         if (module == null || tag == null) {
             return false;
@@ -161,6 +175,8 @@ public class HudManager {
         tag("Minimap Radar", "hud", "new");
         tag("Spotify Now Playing", "hud", "new");
         tag("Mace Enchantment", "hud", "new", "pvp");
+        tag("Mace Hit Damage", "hud", "new", "pvp");
+        tag("Item Beams", "new");
     }
 
     private void tag(String moduleName, String... tags) {

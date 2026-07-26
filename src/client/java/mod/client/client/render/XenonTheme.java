@@ -1,10 +1,10 @@
 package mod.client.client.render;
 
 public enum XenonTheme {
-    RED(0xFFE53935, 0xFFEF5350, 0xFF141414, 0xFF0D0D0D),
-    CARBON(0xFF8EA0B1, 0xFFA9B8C7, 0xFF10131A, 0xFF0A0D12),
-    ICE(0xFF89B6FF, 0xFFA8CCFF, 0xFF0F1420, 0xFF090D15),
-    ARCTIC(0xFF00D9FF, 0xFF00E5FF, 0xE8F4FCFF, 0xDEEEFAFF);
+    BLACK(0xFFA8B3C7, 0xFFD5DCE8, 0xFF11151C, 0xFF090C11),
+    WHITE(0xFFF3F6FA, 0xFFFFFFFF, 0xFF242A33, 0xFF171C23),
+    BLUE(0xFF4D8DFF, 0xFF72A7FF, 0xFF101A2C, 0xFF0A1120),
+    GREEN(0xFF38C985, 0xFF65DCA3, 0xFF101E19, 0xFF09150F);
 
     public final int accent;
     public final int accentHover;
@@ -19,11 +19,22 @@ public enum XenonTheme {
     }
 
     public static XenonTheme fromId(String id) {
+        if (id != null) {
+            if (id.equalsIgnoreCase("ICE") || id.equalsIgnoreCase("ARCTIC")) {
+                return BLUE;
+            }
+            if (id.equalsIgnoreCase("CARBON")) {
+                return BLACK;
+            }
+            if (id.equalsIgnoreCase("RED")) {
+                return GREEN;
+            }
+        }
         for (XenonTheme theme : values()) {
             if (theme.name().equalsIgnoreCase(id)) {
                 return theme;
             }
         }
-        return RED;
+        return BLACK;
     }
 }

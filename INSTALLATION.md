@@ -4,7 +4,7 @@
 
 ### 📦 JAR-Datei Location
 ```
-build\libs\client-1.1.3.jar
+build\libs\client-1.2.0.jar
 ```
 
 ---
@@ -24,7 +24,7 @@ build\libs\client-1.1.3.jar
    - Linux: `~/.minecraft/mods`
 
 ### Schritt 3: Xenon Client installieren
-1. Kopiere `build\libs\client-1.1.3.jar` in den `mods` Ordner
+1. Kopiere `build\libs\client-1.2.0.jar` in den `mods` Ordner
 2. Starte Minecraft mit dem **Fabric** Profil
 3. Drücke **RSHIFT** (Rechts Shift) im Spiel, um das Menü zu öffnen
 
@@ -43,11 +43,12 @@ Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** ankli
 
 ## 🎨 Features
 
-### Arctic Glow Design
-- 🧊 Glassmorphic White UI mit Cyan-Akzenten
-- ✨ Subtile Glow-Effekte bei aktiven Modulen
-- 🎯 Ultra-clean minimalistisches Design
-- 📱 Moderne Fluent Design Ästhetik
+### Vier Editions
+- **Black** - tiefschwarze Arbeitsoberfläche mit neutralem Akzent
+- **White** - dunkle Oberfläche mit klarem weißen Akzent
+- **Blue** - kühles Blau für Panels, Regler und Item-Beams
+- **Green** - kontrastreiches Grün für Panels, Regler und Item-Beams
+- Einheitliche Glasflächen und dezente Glow-Effekte in allen Ansichten
 
 ### HUD Module
 - **CPS Tracker** - Clicks per Second Anzeige
@@ -62,12 +63,15 @@ Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** ankli
 - **Direction HUD** - Richtungsanzeige
 - **Session Stats** - Sitzungsstatistik
 - **Reach Display** - Reichweitenanzeige
+- **Mace Hit Damage** - zeigt nach einem Mace-Treffer den verursachten Schaden
+- **Item Beams** - dezente Strahlen über gedroppten Items bis 32 Blöcke Entfernung
 
 ### Navigation
 - 📋 **MODULES** - Alle HUD-Module mit Toggle
 - ⚙️ **SETTINGS** - Einstellungen
 - 📍 **POSITIONS** - HUD-Positionierung
-- 💬 **CHAT** - Chat-Einstellungen
+- 🛡️ **SHIELD** - Clientseitiger Schildeditor
+- 🎵 **SPOTIFY** - Spotify-Steuerung und HUD
 - ⚡ **PERFORMANCE** - Performance-Optionen
 - 🔧 **CONFIG** - Erweiterte Konfiguration
 - ℹ️ **ABOUT** - Über die Mod
@@ -77,14 +81,14 @@ Danach im Xenon-Menü den Spotify-Tab öffnen und **Connect with Spotify** ankli
 - 🔍 Module-Suche im Menü
 - 🏷️ Filter: All, Combat, Render, HUD, Util, Movement
 - 🎚️ Skalierung pro Modul
+- ⚙️ Eigenes Config-Menü für jedes Modul: Toggle, Skalierung, Keybind und Positions-Reset
 - 💾 Automatisches Speichern der Einstellungen
 - 🛡️ 16×16-Schildeditor mit eigener RGB-Farbe
 
 ### Eigenes Schild zeichnen
-1. Halte ein Schild in der Haupt- oder Nebenhand.
-2. Öffne das Xenon-Menü mit **RSHIFT** und wähle den Schild-Tab.
-3. Zeichne mit der linken Maustaste; die rechte Maustaste löscht Pixel.
-4. Wähle die Farbe über die RGB-Regler und klicke **Save local design**.
+1. Öffne das Xenon-Menü mit **RSHIFT** und wähle den Schild-Tab.
+2. Zeichne mit der linken Maustaste; die rechte Maustaste löscht Pixel.
+3. Wähle die Farbe über die RGB-Regler und klicke **Save local design**.
 
 Der Schildeditor funktioniert vollständig clientseitig. Auf dem Server ist keine Xenon-Mod erforderlich. Das eigene Muster ist nur auf deinem Client sichtbar; andere Spieler sehen ein normales Schild.
 
@@ -99,6 +103,7 @@ Der Schildeditor funktioniert vollständig clientseitig. Auf dem Server ist kein
 | Creative-Flug verlangsamen | **Ctrl + Mausrad runter** |
 | Modul an/aus | Toggle im Menü oder Keybind |
 | Keybind setzen | "Key" Button im Modul-Card |
+| Modul konfigurieren | Regler-Icon auf der Modulkarte |
 | Suche | Suchfeld oben rechts |
 | Scrollen | Mausrad |
 
@@ -119,7 +124,7 @@ Der Schildeditor funktioniert vollständig clientseitig. Auf dem Server ist kein
 ---
 
 ## 📝 Version Info
-- **Mod Version:** 1.1.3
+- **Mod Version:** 1.2.0
 - **Minecraft:** 1.21.11
 - **Fabric Loader:** 0.19.3
 - **Fabric API:** 0.141.5+1.21.11
@@ -127,4 +132,4 @@ Der Schildeditor funktioniert vollständig clientseitig. Auf dem Server ist kein
 ---
 
 ## 🎉 Fertig!
-Viel Spaß mit deinem Arctic Glow Client! ❄️✨
+Viel Spaß mit Xenon Client!
